@@ -352,7 +352,10 @@ export function Room1VideoOnly({
             handleOffer(fromId, offer, localStreamRef.current);
           } else {
             // Stream not ready, queue the offer
-            console.log("[Room1] Stream not ready, queuing offer from:", fromId);
+            console.log(
+              "[Room1] Stream not ready, queuing offer from:",
+              fromId
+            );
             pendingOffersRef.current.push({ fromId, offer });
           }
         },

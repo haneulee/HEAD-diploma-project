@@ -450,7 +450,10 @@ export function Room2AudioOnly({
             handleOffer(fromId, offer, localStreamRef.current);
           } else {
             // Stream not ready, queue the offer
-            console.log("[Room2] Stream not ready, queuing offer from:", fromId);
+            console.log(
+              "[Room2] Stream not ready, queuing offer from:",
+              fromId
+            );
             pendingOffersRef.current.push({ fromId, offer });
           }
         },
