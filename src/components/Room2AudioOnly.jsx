@@ -411,7 +411,9 @@ export function Room2AudioOnly({
             },
             onUserJoined: (userId) => {
               // New user joined - they will send us an offer via onRoomUsers
-              console.log(`[Room2] User ${userId} joined, waiting for their offer`);
+              console.log(
+                `[Room2] User ${userId} joined, waiting for their offer`
+              );
             },
             onUserLeft: (userId) => {
               removePeer(userId);
