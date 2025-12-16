@@ -155,6 +155,12 @@ export function Room1VideoOnly({
   // Connect to a peer (initiator)
   const connectToPeer = useCallback(
     async (peerId, stream) => {
+      // Skip if already connected
+      if (peersRef.current[peerId]) {
+        console.log(`[RTC] Already connected to ${peerId}, skipping`);
+        return;
+      }
+
       const pc = createPeerConnection(peerId, stream);
 
       try {
@@ -180,6 +186,14 @@ export function Room1VideoOnly({
   const handleOffer = useCallback(
     async (fromId, offer, stream) => {
       console.log(`[RTC] Received offer from ${fromId}`);
+
+      // If connection exists, close it first to allow renegotiation
+      if (peersRef.current[fromId]) {
+        console.log(`[RTC] Closing existing connection to ${fromId} for renegotiation`);
+        peersRef.current[fromId].close();
+        delete peersRef.current[fromId];
+      }
+
       const pc = createPeerConnection(fromId, stream);
 
       try {
