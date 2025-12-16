@@ -1,6 +1,6 @@
 /**
  * Room 4: Messages Only
- * Text input ONLY, no emojis, no typing indicators
+ * Text input with emojis allowed
  * Replies are OPTIONAL (clearly stated)
  * Messages are shared in real-time but NOT stored
  */
@@ -8,10 +8,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const MAX_MESSAGE_LENGTH = 200;
-
-// Simple emoji regex to filter out emojis
-const EMOJI_REGEX =
-  /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]/gu;
 
 export function Room4Messages({
   participantId,
@@ -59,10 +55,9 @@ export function Room4Messages({
     };
   }, [clearMessages]);
 
-  // Filter out emojis from input
+  // Handle input change
   const handleInputChange = (e) => {
-    const filtered = e.target.value.replace(EMOJI_REGEX, "");
-    setInput(filtered.slice(0, MAX_MESSAGE_LENGTH));
+    setInput(e.target.value.slice(0, MAX_MESSAGE_LENGTH));
   };
 
   // Send message
@@ -137,8 +132,6 @@ export function Room4Messages({
 
       <div className="messages-input-area">
         <div className="messages-rules">
-          <span>No emojis</span>
-          <span>•</span>
           <span>Replies optional</span>
           <span>•</span>
           <span>Content not stored</span>
