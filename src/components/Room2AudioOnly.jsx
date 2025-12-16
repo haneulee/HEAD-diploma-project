@@ -46,6 +46,7 @@ export function Room2AudioOnly({
   const remoteAudioRefs = useRef({}); // peerId -> HTMLAudioElement
   const localStreamRef = useRef(null); // Ref for handlers to access stream
   const pendingUsersRef = useRef([]); // Users to connect when stream is ready
+  const pendingOffersRef = useRef([]); // Offers to process when stream is ready
 
   const onSpeakingEventRef = useRef(onSpeakingEvent);
   onSpeakingEventRef.current = onSpeakingEvent;
@@ -295,11 +296,26 @@ export function Room2AudioOnly({
 
       // Connect to any pending users that arrived before stream was ready
       if (pendingUsersRef.current.length > 0) {
-        console.log("[Room2] Connecting to pending users:", pendingUsersRef.current);
+        console.log(
+          "[Room2] Connecting to pending users:",
+          pendingUsersRef.current
+        );
         pendingUsersRef.current.forEach((userId) => {
           connectToPeer(userId, stream);
         });
         pendingUsersRef.current = [];
+      }
+
+      // Process any pending offers that arrived before stream was ready
+      if (pendingOffersRef.current.length > 0) {
+        console.log(
+          "[Room2] Processing pending offers:",
+          pendingOffersRef.current.length
+        );
+        pendingOffersRef.current.forEach(({ fromId, offer }) => {
+          handleOffer(fromId, offer, stream);
+        });
+        pendingOffersRef.current = [];
       }
 
       // Set up Web Audio API for volume analysis
@@ -432,6 +448,10 @@ export function Room2AudioOnly({
           console.log(`[Room2] Received offer from ${fromId}`);
           if (localStreamRef.current) {
             handleOffer(fromId, offer, localStreamRef.current);
+          } else {
+            // Stream not ready, queue the offer
+            console.log("[Room2] Stream not ready, queuing offer from:", fromId);
+            pendingOffersRef.current.push({ fromId, offer });
           }
         },
         onRtcAnswer: (fromId, answer) => {

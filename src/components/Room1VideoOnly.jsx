@@ -33,6 +33,7 @@ export function Room1VideoOnly({
   const peersRef = useRef({}); // peerId -> RTCPeerConnection
   const localStreamRef = useRef(null); // Ref for handlers to access stream
   const pendingUsersRef = useRef([]); // Users to connect when stream is ready
+  const pendingOffersRef = useRef([]); // Offers to process when stream is ready
 
   // Request camera permission and start stream
   const startCamera = useCallback(async () => {
@@ -55,11 +56,26 @@ export function Room1VideoOnly({
 
       // Connect to any pending users that arrived before stream was ready
       if (pendingUsersRef.current.length > 0) {
-        console.log("[Room1] Connecting to pending users:", pendingUsersRef.current);
+        console.log(
+          "[Room1] Connecting to pending users:",
+          pendingUsersRef.current
+        );
         pendingUsersRef.current.forEach((userId) => {
           connectToPeer(userId, stream);
         });
         pendingUsersRef.current = [];
+      }
+
+      // Process any pending offers that arrived before stream was ready
+      if (pendingOffersRef.current.length > 0) {
+        console.log(
+          "[Room1] Processing pending offers:",
+          pendingOffersRef.current.length
+        );
+        pendingOffersRef.current.forEach(({ fromId, offer }) => {
+          handleOffer(fromId, offer, stream);
+        });
+        pendingOffersRef.current = [];
       }
 
       setHasPermission(true);
@@ -334,6 +350,10 @@ export function Room1VideoOnly({
           console.log(`[Room1] Received offer from ${fromId}`);
           if (localStreamRef.current) {
             handleOffer(fromId, offer, localStreamRef.current);
+          } else {
+            // Stream not ready, queue the offer
+            console.log("[Room1] Stream not ready, queuing offer from:", fromId);
+            pendingOffersRef.current.push({ fromId, offer });
           }
         },
         onRtcAnswer: (fromId, answer) => {
