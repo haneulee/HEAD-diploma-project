@@ -45,6 +45,7 @@ export function Room2AudioOnly({
   const peersRef = useRef({}); // peerId -> RTCPeerConnection
   const remoteAudioRefs = useRef({}); // peerId -> HTMLAudioElement
   const localStreamRef = useRef(null); // Ref for handlers to access stream
+  const pendingUsersRef = useRef([]); // Users to connect when stream is ready
 
   const onSpeakingEventRef = useRef(onSpeakingEvent);
   onSpeakingEventRef.current = onSpeakingEvent;
@@ -292,6 +293,15 @@ export function Room2AudioOnly({
       setLocalStream(stream);
       localStreamRef.current = stream; // Store in ref for handlers
 
+      // Connect to any pending users that arrived before stream was ready
+      if (pendingUsersRef.current.length > 0) {
+        console.log("[Room2] Connecting to pending users:", pendingUsersRef.current);
+        pendingUsersRef.current.forEach((userId) => {
+          connectToPeer(userId, stream);
+        });
+        pendingUsersRef.current = [];
+      }
+
       // Set up Web Audio API for volume analysis
       const audioContext = new (window.AudioContext ||
         window.webkitAudioContext)();
@@ -400,15 +410,20 @@ export function Room2AudioOnly({
         onRoomUsers: (users) => {
           console.log("[Room2] Got room users:", users);
           users.forEach((userId) => {
-            if (userId !== participantId && localStreamRef.current) {
-              connectToPeer(userId, localStreamRef.current);
+            if (userId !== participantId) {
+              if (localStreamRef.current) {
+                // Stream ready, connect now
+                connectToPeer(userId, localStreamRef.current);
+              } else {
+                // Stream not ready, save for later
+                console.log("[Room2] Stream not ready, queuing user:", userId);
+                pendingUsersRef.current.push(userId);
+              }
             }
           });
         },
         onUserJoined: (userId) => {
-          console.log(
-            `[Room2] User ${userId} joined, waiting for their offer`
-          );
+          console.log(`[Room2] User ${userId} joined, waiting for their offer`);
         },
         onUserLeft: (userId) => {
           removePeer(userId);
