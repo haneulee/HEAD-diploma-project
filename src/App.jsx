@@ -111,9 +111,7 @@ function App() {
 
   // Get presence count for current room (server already includes self)
   const currentRoomPresence =
-    session.currentRoom !== null
-      ? getPresenceCount(session.currentRoom)
-      : 0;
+    session.currentRoom !== null ? getPresenceCount(session.currentRoom) : 0;
 
   return (
     <div className="app">

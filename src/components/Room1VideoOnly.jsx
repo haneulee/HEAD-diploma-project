@@ -301,11 +301,8 @@ export function Room1VideoOnly({
               });
             },
             onUserJoined: (userId) => {
-              // New user joined - send them an offer
-              console.log(`[Room1] User ${userId} joined, sending offer`);
-              if (userId !== participantId && stream) {
-                connectToPeer(userId, stream);
-              }
+              // New user joined - they will send us an offer via onRoomUsers
+              console.log(`[Room1] User ${userId} joined, waiting for their offer`);
             },
             onUserLeft: (userId) => {
               removePeer(userId);

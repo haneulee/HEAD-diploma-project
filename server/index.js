@@ -274,14 +274,14 @@ wss.on("connection", (ws) => {
               drawingHistory = drawingHistory.slice(-MAX_DRAWING_HISTORY);
             }
 
-            // Broadcast to others
+            // Broadcast to everyone (including sender, for sync)
             broadcastToRoom(
               6,
               {
                 type: "draw_stroke",
                 stroke,
               },
-              ws
+              null // Include sender so their strokes are in drawingStrokes
             );
           }
           break;
