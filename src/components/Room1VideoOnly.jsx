@@ -280,6 +280,17 @@ export function Room1VideoOnly({
     setIsCameraOn(false);
   }, [onCameraTime, localStream]);
 
+  // Ensure local video element has the stream
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+      // Ensure video plays
+      localVideoRef.current.play().catch((e) => {
+        console.log("[Room1] Video autoplay blocked:", e);
+      });
+    }
+  }, [localStream]);
+
   // Start camera and register handlers on mount
   useEffect(() => {
     let mounted = true;
