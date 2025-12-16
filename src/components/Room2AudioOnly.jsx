@@ -362,6 +362,8 @@ export function Room2AudioOnly({
 
   // Stop microphone and cleanup
   const stopMic = useCallback(() => {
+    console.log("[Room2] Stopping mic and closing connections");
+
     if (micStartRef.current) {
       const elapsed = Date.now() - micStartRef.current;
       if (elapsed > 0) {
@@ -398,6 +400,7 @@ export function Room2AudioOnly({
 
     // Close all peer connections
     Object.keys(peersRef.current).forEach((peerId) => {
+      console.log("[Room2] Closing peer connection:", peerId);
       peersRef.current[peerId].close();
     });
     peersRef.current = {};
@@ -408,16 +411,25 @@ export function Room2AudioOnly({
     });
     remoteAudioRefs.current = {};
 
+    // Clear pending queues
+    pendingUsersRef.current = [];
+    pendingOffersRef.current = [];
+
     setRemotePeers({});
 
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-      setLocalStream(null);
+    // Stop local stream using ref (more reliable than state)
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        console.log("[Room2] Stopping track:", track.kind);
+        track.stop();
+      });
+      localStreamRef.current = null;
     }
+    setLocalStream(null);
 
     setIsSpeaking(false);
     setVolume(0);
-  }, [onMicTime, onSpeakingEvent, localStream]);
+  }, [onMicTime, onSpeakingEvent]);
 
   // Register handlers immediately on mount (before mic starts)
   useEffect(() => {

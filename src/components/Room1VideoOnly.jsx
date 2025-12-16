@@ -273,6 +273,8 @@ export function Room1VideoOnly({
 
   // Stop camera and cleanup
   const stopCamera = useCallback(() => {
+    console.log("[Room1] Stopping camera and closing connections");
+
     // Record final camera time
     if (cameraStartRef.current) {
       const elapsed = Date.now() - cameraStartRef.current;
@@ -290,23 +292,32 @@ export function Room1VideoOnly({
 
     // Close all peer connections
     Object.keys(peersRef.current).forEach((peerId) => {
+      console.log("[Room1] Closing peer connection:", peerId);
       peersRef.current[peerId].close();
     });
     peersRef.current = {};
     setRemoteStreams({});
 
-    // Stop local stream
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-      setLocalStream(null);
+    // Clear pending queues
+    pendingUsersRef.current = [];
+    pendingOffersRef.current = [];
+
+    // Stop local stream using ref (more reliable than state)
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        console.log("[Room1] Stopping track:", track.kind);
+        track.stop();
+      });
+      localStreamRef.current = null;
     }
+    setLocalStream(null);
 
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = null;
     }
 
     setIsCameraOn(false);
-  }, [onCameraTime, localStream]);
+  }, [onCameraTime]);
 
   // Ensure local video element has the stream
   useEffect(() => {
