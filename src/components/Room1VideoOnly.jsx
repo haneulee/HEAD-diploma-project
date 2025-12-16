@@ -31,6 +31,7 @@ export function Room1VideoOnly({
   const cameraStartRef = useRef(null);
   const trackingIntervalRef = useRef(null);
   const peersRef = useRef({}); // peerId -> RTCPeerConnection
+  const localStreamRef = useRef(null); // Ref for handlers to access stream
 
   // Request camera permission and start stream
   const startCamera = useCallback(async () => {
@@ -45,6 +46,7 @@ export function Room1VideoOnly({
       });
 
       setLocalStream(stream);
+      localStreamRef.current = stream; // Store in ref for handlers
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -291,46 +293,52 @@ export function Room1VideoOnly({
     }
   }, [localStream]);
 
-  // Start camera and register handlers on mount
+  // Register handlers immediately on mount (before camera starts)
+  useEffect(() => {
+    if (registerHandlers) {
+      registerHandlers({
+        onRoomUsers: (users) => {
+          // Connect to existing users in room
+          console.log("[Room1] Got room users:", users);
+          users.forEach((userId) => {
+            if (userId !== participantId && localStreamRef.current) {
+              connectToPeer(userId, localStreamRef.current);
+            }
+          });
+        },
+        onUserJoined: (userId) => {
+          // New user joined - they will send us an offer via onRoomUsers
+          console.log(
+            `[Room1] User ${userId} joined, waiting for their offer`
+          );
+        },
+        onUserLeft: (userId) => {
+          removePeer(userId);
+        },
+        onRtcOffer: (fromId, offer) => {
+          console.log(`[Room1] Received offer from ${fromId}`);
+          if (localStreamRef.current) {
+            handleOffer(fromId, offer, localStreamRef.current);
+          }
+        },
+        onRtcAnswer: (fromId, answer) => {
+          handleAnswer(fromId, answer);
+        },
+        onRtcIceCandidate: (fromId, candidate) => {
+          handleIceCandidate(fromId, candidate);
+        },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registerHandlers]);
+
+  // Start camera on mount
   useEffect(() => {
     let mounted = true;
-    let stream = null;
 
     const init = async () => {
       if (mounted) {
-        stream = await startCamera();
-
-        if (stream && registerHandlers) {
-          // Register WebRTC signaling handlers
-          registerHandlers({
-            onRoomUsers: (users) => {
-              // Connect to existing users in room
-              users.forEach((userId) => {
-                if (userId !== participantId && stream) {
-                  connectToPeer(userId, stream);
-                }
-              });
-            },
-            onUserJoined: (userId) => {
-              // New user joined - they will send us an offer via onRoomUsers
-              console.log(
-                `[Room1] User ${userId} joined, waiting for their offer`
-              );
-            },
-            onUserLeft: (userId) => {
-              removePeer(userId);
-            },
-            onRtcOffer: (fromId, offer) => {
-              handleOffer(fromId, offer, stream);
-            },
-            onRtcAnswer: (fromId, answer) => {
-              handleAnswer(fromId, answer);
-            },
-            onRtcIceCandidate: (fromId, candidate) => {
-              handleIceCandidate(fromId, candidate);
-            },
-          });
-        }
+        await startCamera();
       }
     };
 

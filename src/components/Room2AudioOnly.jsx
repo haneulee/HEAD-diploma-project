@@ -44,6 +44,7 @@ export function Room2AudioOnly({
 
   const peersRef = useRef({}); // peerId -> RTCPeerConnection
   const remoteAudioRefs = useRef({}); // peerId -> HTMLAudioElement
+  const localStreamRef = useRef(null); // Ref for handlers to access stream
 
   const onSpeakingEventRef = useRef(onSpeakingEvent);
   onSpeakingEventRef.current = onSpeakingEvent;
@@ -289,6 +290,7 @@ export function Room2AudioOnly({
       });
 
       setLocalStream(stream);
+      localStreamRef.current = stream; // Store in ref for handlers
 
       // Set up Web Audio API for volume analysis
       const audioContext = new (window.AudioContext ||
@@ -391,44 +393,50 @@ export function Room2AudioOnly({
     setVolume(0);
   }, [onMicTime, onSpeakingEvent, localStream]);
 
-  // Start mic and register handlers on mount
+  // Register handlers immediately on mount (before mic starts)
+  useEffect(() => {
+    if (registerHandlers) {
+      registerHandlers({
+        onRoomUsers: (users) => {
+          console.log("[Room2] Got room users:", users);
+          users.forEach((userId) => {
+            if (userId !== participantId && localStreamRef.current) {
+              connectToPeer(userId, localStreamRef.current);
+            }
+          });
+        },
+        onUserJoined: (userId) => {
+          console.log(
+            `[Room2] User ${userId} joined, waiting for their offer`
+          );
+        },
+        onUserLeft: (userId) => {
+          removePeer(userId);
+        },
+        onRtcOffer: (fromId, offer) => {
+          console.log(`[Room2] Received offer from ${fromId}`);
+          if (localStreamRef.current) {
+            handleOffer(fromId, offer, localStreamRef.current);
+          }
+        },
+        onRtcAnswer: (fromId, answer) => {
+          handleAnswer(fromId, answer);
+        },
+        onRtcIceCandidate: (fromId, candidate) => {
+          handleIceCandidate(fromId, candidate);
+        },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registerHandlers]);
+
+  // Start mic on mount
   useEffect(() => {
     let mounted = true;
-    let stream = null;
 
     const init = async () => {
       if (mounted) {
-        stream = await startMic();
-
-        if (stream && registerHandlers) {
-          registerHandlers({
-            onRoomUsers: (users) => {
-              users.forEach((userId) => {
-                if (userId !== participantId && stream) {
-                  connectToPeer(userId, stream);
-                }
-              });
-            },
-            onUserJoined: (userId) => {
-              // New user joined - they will send us an offer via onRoomUsers
-              console.log(
-                `[Room2] User ${userId} joined, waiting for their offer`
-              );
-            },
-            onUserLeft: (userId) => {
-              removePeer(userId);
-            },
-            onRtcOffer: (fromId, offer) => {
-              handleOffer(fromId, offer, stream);
-            },
-            onRtcAnswer: (fromId, answer) => {
-              handleAnswer(fromId, answer);
-            },
-            onRtcIceCandidate: (fromId, candidate) => {
-              handleIceCandidate(fromId, candidate);
-            },
-          });
-        }
+        await startMic();
       }
     };
 
