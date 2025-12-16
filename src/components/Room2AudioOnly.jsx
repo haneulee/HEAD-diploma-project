@@ -226,7 +226,9 @@ export function Room2AudioOnly({
 
       // If connection exists, close it first to allow renegotiation
       if (peersRef.current[fromId]) {
-        console.log(`[RTC Audio] Closing existing connection to ${fromId} for renegotiation`);
+        console.log(
+          `[RTC Audio] Closing existing connection to ${fromId} for renegotiation`
+        );
         peersRef.current[fromId].close();
         delete peersRef.current[fromId];
       }
@@ -408,7 +410,11 @@ export function Room2AudioOnly({
               });
             },
             onUserJoined: (userId) => {
-              console.log(`[Room2] User ${userId} joined`);
+              // New user joined - send them an offer
+              console.log(`[Room2] User ${userId} joined, sending offer`);
+              if (userId !== participantId && stream) {
+                connectToPeer(userId, stream);
+              }
             },
             onUserLeft: (userId) => {
               removePeer(userId);

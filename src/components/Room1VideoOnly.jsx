@@ -189,7 +189,9 @@ export function Room1VideoOnly({
 
       // If connection exists, close it first to allow renegotiation
       if (peersRef.current[fromId]) {
-        console.log(`[RTC] Closing existing connection to ${fromId} for renegotiation`);
+        console.log(
+          `[RTC] Closing existing connection to ${fromId} for renegotiation`
+        );
         peersRef.current[fromId].close();
         delete peersRef.current[fromId];
       }
@@ -299,8 +301,11 @@ export function Room1VideoOnly({
               });
             },
             onUserJoined: (userId) => {
-              // New user joined - they will send us an offer
-              console.log(`[Room1] User ${userId} joined, waiting for offer`);
+              // New user joined - send them an offer
+              console.log(`[Room1] User ${userId} joined, sending offer`);
+              if (userId !== participantId && stream) {
+                connectToPeer(userId, stream);
+              }
             },
             onUserLeft: (userId) => {
               removePeer(userId);
