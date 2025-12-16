@@ -109,10 +109,10 @@ function App() {
     setCurrentView(VIEW.LOBBY);
   }, [resetSession]);
 
-  // Get presence count for current room (includes self)
+  // Get presence count for current room (server already includes self)
   const currentRoomPresence =
     session.currentRoom !== null
-      ? getPresenceCount(session.currentRoom) + 1 // +1 for self
+      ? getPresenceCount(session.currentRoom)
       : 0;
 
   return (
