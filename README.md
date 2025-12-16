@@ -230,9 +230,9 @@ VITE_DATA_ENDPOINT=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
 
 ### 환경 변수 요약
 
-| 변수 | 설명 | 예시 |
-|------|------|------|
-| `VITE_WS_URL` | WebSocket 서버 URL | `wss://your-app.railway.app` |
+| 변수                 | 설명                   | 예시                            |
+| -------------------- | ---------------------- | ------------------------------- |
+| `VITE_WS_URL`        | WebSocket 서버 URL     | `wss://your-app.railway.app`    |
 | `VITE_DATA_ENDPOINT` | Google Apps Script URL | `https://script.google.com/...` |
 
 ## Privacy & Ethics
