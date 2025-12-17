@@ -33,6 +33,9 @@ export function Room1VideoOnly({
   const pendingUsersRef = useRef([]); // Users to connect when stream is ready
   const pendingOffersRef = useRef([]); // Offers to process when stream is ready
   const presenceCountRef = useRef(presenceCount);
+  const reconnectTimeoutsRef = useRef({}); // peerId -> timeout ID for reconnection attempts
+  const connectToPeerRef = useRef(null); // Ref to connectToPeer function
+  const handleOfferRef = useRef(null); // Ref to handleOffer function
 
   // Keep presence count ref updated
   useEffect(() => {
@@ -59,28 +62,8 @@ export function Room1VideoOnly({
       }
 
       // Connect to any pending users that arrived before stream was ready
-      if (pendingUsersRef.current.length > 0) {
-        console.log(
-          "[Room1] Connecting to pending users:",
-          pendingUsersRef.current
-        );
-        pendingUsersRef.current.forEach((userId) => {
-          connectToPeer(userId, stream);
-        });
-        pendingUsersRef.current = [];
-      }
-
-      // Process any pending offers that arrived before stream was ready
-      if (pendingOffersRef.current.length > 0) {
-        console.log(
-          "[Room1] Processing pending offers:",
-          pendingOffersRef.current.length
-        );
-        pendingOffersRef.current.forEach(({ fromId, offer }) => {
-          handleOffer(fromId, offer, stream);
-        });
-        pendingOffersRef.current = [];
-      }
+      // These will be processed by handlers once functions are defined
+      // (handlers check localStreamRef.current and process pending queues)
 
       setHasPermission(true);
 
@@ -106,6 +89,34 @@ export function Room1VideoOnly({
     }
   }, [onIdleWithOthers]);
 
+  // Remove peer connection (defined early to avoid circular dependency)
+  const removePeer = useCallback((peerId) => {
+    const pc = peersRef.current[peerId];
+    if (pc) {
+      // Clear any pending reconnection timeouts
+      if (reconnectTimeoutsRef.current[peerId]) {
+        clearTimeout(reconnectTimeoutsRef.current[peerId]);
+        delete reconnectTimeoutsRef.current[peerId];
+      }
+
+      // Log connection states before closing
+      console.log(`[RTC] Removing peer ${peerId}`, {
+        connectionState: pc.connectionState,
+        iceConnectionState: pc.iceConnectionState,
+        signalingState: pc.signalingState,
+      });
+
+      pc.close();
+      delete peersRef.current[peerId];
+      setRemoteStreams((prev) => {
+        const newStreams = { ...prev };
+        delete newStreams[peerId];
+        return newStreams;
+      });
+      console.log(`[RTC] Removed peer ${peerId}`);
+    }
+  }, []);
+
   // Create peer connection
   const createPeerConnection = useCallback(
     (peerId, stream) => {
@@ -127,58 +138,153 @@ export function Room1VideoOnly({
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log(
+            `[RTC] ICE candidate from ${peerId}:`,
+            event.candidate.candidate.substring(0, 50)
+          );
           sendRtcSignal({
             type: "rtc_ice_candidate",
             targetId: peerId,
             candidate: event.candidate,
           });
+        } else {
+          console.log(`[RTC] ICE gathering complete for ${peerId}`);
+        }
+      };
+
+      // Handle ICE connection state
+      pc.oniceconnectionstatechange = () => {
+        const iceState = pc.iceConnectionState;
+        const connState = pc.connectionState;
+        const iceGathering = pc.iceGatheringState;
+        console.log(
+          `[RTC] ${peerId} ICE: ${iceState}, Connection: ${connState}, Gathering: ${iceGathering}`
+        );
+
+        if (iceState === "failed") {
+          console.log(`[RTC] ${peerId} ICE failed, attempting restartIce`);
+          try {
+            pc.restartIce();
+          } catch (err) {
+            console.error(`[RTC] Error restarting ICE for ${peerId}:`, err);
+          }
+        } else if (iceState === "disconnected") {
+          console.log(
+            `[RTC] ${peerId} ICE disconnected, attempting restartIce`
+          );
+          try {
+            pc.restartIce();
+          } catch (err) {
+            console.error(`[RTC] Error restarting ICE for ${peerId}:`, err);
+          }
+        } else if (iceState === "connected" || iceState === "completed") {
+          // Clear any pending reconnection timeouts
+          if (reconnectTimeoutsRef.current[peerId]) {
+            clearTimeout(reconnectTimeoutsRef.current[peerId]);
+            delete reconnectTimeoutsRef.current[peerId];
+          }
         }
       };
 
       // Handle remote stream
       pc.ontrack = (event) => {
-        console.log(`[RTC] Received track from ${peerId}`);
-        const [remoteStream] = event.streams;
+        console.log(`[RTC] Received track from ${peerId}`, {
+          streams: event.streams.length,
+          track: event.track.kind,
+          id: event.track.id,
+        });
+
+        // Create stream from track if streams array is empty
+        let remoteStream = event.streams[0];
+        if (!remoteStream && event.track) {
+          remoteStream = new MediaStream([event.track]);
+        }
+
         if (remoteStream) {
-          setRemoteStreams((prev) => ({
-            ...prev,
-            [peerId]: remoteStream,
-          }));
+          // Only set if we have video tracks
+          const videoTracks = remoteStream.getVideoTracks();
+          if (videoTracks.length > 0) {
+            setRemoteStreams((prev) => ({
+              ...prev,
+              [peerId]: remoteStream,
+            }));
+          }
         }
       };
 
       // Handle connection state
       pc.onconnectionstatechange = () => {
-        console.log(`[RTC] ${peerId} state: ${pc.connectionState}`);
-        if (
-          pc.connectionState === "disconnected" ||
-          pc.connectionState === "failed" ||
-          pc.connectionState === "closed"
-        ) {
+        const state = pc.connectionState;
+        const iceState = pc.iceConnectionState;
+        const signalingState = pc.signalingState;
+        console.log(
+          `[RTC] ${peerId} connection state: ${state}, ICE: ${iceState}, Signaling: ${signalingState}`
+        );
+
+        if (state === "closed") {
+          // Connection is closed, remove immediately
           removePeer(peerId);
+        } else if (state === "failed") {
+          // Try to recover with restartIce
+          console.log(
+            `[RTC] ${peerId} connection failed, attempting restartIce`
+          );
+          try {
+            pc.restartIce();
+            // Give it 20 seconds to recover
+            if (reconnectTimeoutsRef.current[peerId]) {
+              clearTimeout(reconnectTimeoutsRef.current[peerId]);
+            }
+            reconnectTimeoutsRef.current[peerId] = setTimeout(() => {
+              if (peersRef.current[peerId]?.connectionState === "failed") {
+                console.log(
+                  `[RTC] ${peerId} still failed after recovery attempt, removing`
+                );
+                removePeer(peerId);
+              }
+            }, 20000);
+          } catch (err) {
+            console.error(`[RTC] Error restarting ICE for ${peerId}:`, err);
+            removePeer(peerId);
+          }
+        } else if (state === "disconnected") {
+          // Try to recover with restartIce
+          console.log(
+            `[RTC] ${peerId} connection disconnected, attempting restartIce`
+          );
+          try {
+            pc.restartIce();
+            // Give it 30 seconds to reconnect
+            if (reconnectTimeoutsRef.current[peerId]) {
+              clearTimeout(reconnectTimeoutsRef.current[peerId]);
+            }
+            reconnectTimeoutsRef.current[peerId] = setTimeout(() => {
+              if (
+                peersRef.current[peerId]?.connectionState === "disconnected"
+              ) {
+                console.log(
+                  `[RTC] ${peerId} still disconnected after recovery attempt, removing`
+                );
+                removePeer(peerId);
+              }
+            }, 30000);
+          } catch (err) {
+            console.error(`[RTC] Error restarting ICE for ${peerId}:`, err);
+          }
+        } else if (state === "connected") {
+          // Clear any pending reconnection timeouts
+          if (reconnectTimeoutsRef.current[peerId]) {
+            clearTimeout(reconnectTimeoutsRef.current[peerId]);
+            delete reconnectTimeoutsRef.current[peerId];
+          }
         }
       };
 
       peersRef.current[peerId] = pc;
       return pc;
     },
-    [sendRtcSignal]
+    [sendRtcSignal, removePeer]
   );
-
-  // Remove peer connection
-  const removePeer = useCallback((peerId) => {
-    const pc = peersRef.current[peerId];
-    if (pc) {
-      pc.close();
-      delete peersRef.current[peerId];
-      setRemoteStreams((prev) => {
-        const newStreams = { ...prev };
-        delete newStreams[peerId];
-        return newStreams;
-      });
-      console.log(`[RTC] Removed peer ${peerId}`);
-    }
-  }, []);
 
   // Connect to a peer (initiator)
   const connectToPeer = useCallback(
@@ -209,6 +315,23 @@ export function Room1VideoOnly({
     },
     [createPeerConnection, sendRtcSignal, removePeer]
   );
+
+  // Store connectToPeer in ref and process pending users
+  useEffect(() => {
+    connectToPeerRef.current = connectToPeer;
+    // Process pending users if stream is ready
+    if (localStreamRef.current && pendingUsersRef.current.length > 0) {
+      console.log(
+        "[Room1] Processing pending users after connectToPeer ready:",
+        pendingUsersRef.current
+      );
+      const usersToConnect = [...pendingUsersRef.current];
+      pendingUsersRef.current = [];
+      usersToConnect.forEach((userId) => {
+        connectToPeer(userId, localStreamRef.current);
+      });
+    }
+  }, [connectToPeer]);
 
   // Handle incoming offer
   const handleOffer = useCallback(
@@ -246,18 +369,45 @@ export function Room1VideoOnly({
     [createPeerConnection, sendRtcSignal, removePeer]
   );
 
-  // Handle incoming answer
-  const handleAnswer = useCallback(async (fromId, answer) => {
-    console.log(`[RTC] Received answer from ${fromId}`);
-    const pc = peersRef.current[fromId];
-    if (pc) {
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      } catch (err) {
-        console.error(`[RTC] Error handling answer:`, err);
-      }
+  // Store handleOffer in ref and process pending offers
+  useEffect(() => {
+    handleOfferRef.current = handleOffer;
+    // Process pending offers if stream is ready
+    if (localStreamRef.current && pendingOffersRef.current.length > 0) {
+      console.log(
+        "[Room1] Processing pending offers after handleOffer ready:",
+        pendingOffersRef.current.length
+      );
+      const offersToProcess = [...pendingOffersRef.current];
+      pendingOffersRef.current = [];
+      offersToProcess.forEach(({ fromId, offer }) => {
+        handleOffer(fromId, offer, localStreamRef.current);
+      });
     }
-  }, []);
+  }, [handleOffer]);
+
+  // Handle incoming answer
+  const handleAnswer = useCallback(
+    async (fromId, answer) => {
+      console.log(`[RTC] Received answer from ${fromId}`);
+      const pc = peersRef.current[fromId];
+      if (pc) {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        } catch (err) {
+          console.error(`[RTC] Error handling answer:`, err);
+          // Only remove if it's a critical error
+          if (
+            err.name === "InvalidStateError" ||
+            err.name === "OperationError"
+          ) {
+            removePeer(fromId);
+          }
+        }
+      }
+    },
+    [removePeer]
+  );
 
   // Handle ICE candidate
   const handleIceCandidate = useCallback(async (fromId, candidate) => {
@@ -328,23 +478,69 @@ export function Room1VideoOnly({
           console.log("[Room1] Got room users:", users);
           users.forEach((userId) => {
             if (userId !== participantId) {
+              // Skip if already connected
+              if (peersRef.current[userId]) {
+                console.log(`[Room1] Already connected to ${userId}, skipping`);
+                return;
+              }
+
               if (localStreamRef.current) {
                 // Stream ready, connect now
                 connectToPeer(userId, localStreamRef.current);
               } else {
                 // Stream not ready, save for later
                 console.log("[Room1] Stream not ready, queuing user:", userId);
-                pendingUsersRef.current.push(userId);
+                if (!pendingUsersRef.current.includes(userId)) {
+                  pendingUsersRef.current.push(userId);
+                }
               }
             }
           });
         },
         onUserJoined: (userId) => {
-          // New user joined - they will send us an offer via onRoomUsers
-          console.log(`[Room1] User ${userId} joined, waiting for their offer`);
+          // New user joined - proactively connect if we have stream ready
+          console.log(`[Room1] User ${userId} joined`);
+          if (localStreamRef.current) {
+            // Stream ready, connect now
+            connectToPeer(userId, localStreamRef.current);
+          } else {
+            // Stream not ready, save for later
+            console.log(`[Room1] Stream not ready, queuing user:`, userId);
+            pendingUsersRef.current.push(userId);
+          }
         },
         onUserLeft: (userId) => {
-          removePeer(userId);
+          // Add defensive check: only remove if connection is truly dead
+          const pc = peersRef.current[userId];
+          if (pc) {
+            const connState = pc.connectionState;
+            const iceState = pc.iceConnectionState;
+
+            // Don't remove if still connecting or ICE is checking
+            if (
+              connState === "connecting" ||
+              connState === "new" ||
+              iceState === "checking" ||
+              iceState === "new"
+            ) {
+              console.log(
+                `[RTC] Delaying removal of ${userId} - still connecting (${connState}, ${iceState})`
+              );
+              // Wait 5 seconds before removing to avoid false positives
+              setTimeout(() => {
+                if (peersRef.current[userId]) {
+                  removePeer(userId);
+                }
+              }, 5000);
+            } else {
+              removePeer(userId);
+            }
+          } else {
+            // No peer connection, safe to ignore
+            console.log(
+              `[RTC] User ${userId} left but no peer connection exists`
+            );
+          }
         },
         onRtcOffer: (fromId, offer) => {
           console.log(`[Room1] Received offer from ${fromId}`);
@@ -458,11 +654,62 @@ export function Room1VideoOnly({
 function RemoteVideo({ peerId, stream }) {
   const videoRef = useRef(null);
 
+  // Handle stream changes
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      // Explicitly play the video
+      videoRef.current.play().catch((err) => {
+        console.error(`[RemoteVideo] Error playing video for ${peerId}:`, err);
+      });
+    } else if (videoRef.current && !stream) {
+      // Clear srcObject if stream is removed
+      videoRef.current.srcObject = null;
     }
-  }, [stream]);
+  }, [stream, peerId]);
+
+  // Handle track changes
+  useEffect(() => {
+    if (!stream || !videoRef.current) return;
+
+    const handleTrackEnded = () => {
+      console.log(`[RemoteVideo] Track ended for ${peerId}`);
+    };
+    const handleTrackMute = () => {
+      console.log(`[RemoteVideo] Track muted for ${peerId}`);
+    };
+    const handleTrackUnmute = () => {
+      console.log(`[RemoteVideo] Track unmuted for ${peerId}`);
+    };
+    const handleTrackAdded = (event) => {
+      console.log(`[RemoteVideo] Track added for ${peerId}:`, event.track.kind);
+    };
+    const handleTrackRemoved = (event) => {
+      console.log(
+        `[RemoteVideo] Track removed for ${peerId}:`,
+        event.track.kind
+      );
+    };
+
+    const tracks = stream.getTracks();
+    tracks.forEach((track) => {
+      track.addEventListener("ended", handleTrackEnded);
+      track.addEventListener("mute", handleTrackMute);
+      track.addEventListener("unmute", handleTrackUnmute);
+      track.addEventListener("addtrack", handleTrackAdded);
+      track.addEventListener("removetrack", handleTrackRemoved);
+    });
+
+    return () => {
+      tracks.forEach((track) => {
+        track.removeEventListener("ended", handleTrackEnded);
+        track.removeEventListener("mute", handleTrackMute);
+        track.removeEventListener("unmute", handleTrackUnmute);
+        track.removeEventListener("addtrack", handleTrackAdded);
+        track.removeEventListener("removetrack", handleTrackRemoved);
+      });
+    };
+  }, [stream, peerId]);
 
   return (
     <div className="video-container remote">

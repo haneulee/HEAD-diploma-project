@@ -63,10 +63,21 @@ export function useWebSocket(participantId) {
         break;
 
       case "user_left":
-        setRoomUsers((prev) => prev.filter((id) => id !== data.participantId));
-        // Notify RTC handler about user leaving
+        // Only filter if user is actually in the list
+        setRoomUsers((prev) => {
+          if (prev.includes(data.participantId)) {
+            return prev.filter((id) => id !== data.participantId);
+          }
+          return prev;
+        });
+        // Notify RTC handler about user leaving with a small delay
+        // to avoid premature removal during WebRTC setup
         if (handlersRef.current.onUserLeft) {
-          handlersRef.current.onUserLeft(data.participantId);
+          setTimeout(() => {
+            if (handlersRef.current.onUserLeft) {
+              handlersRef.current.onUserLeft(data.participantId);
+            }
+          }, 100);
         }
         break;
 
@@ -218,12 +229,18 @@ export function useWebSocket(participantId) {
 
   // Join a room
   const joinRoom = useCallback((roomId) => {
+    // Only clear room data if actually changing rooms
+    const isChangingRoom = currentRoomRef.current !== roomId;
     currentRoomRef.current = roomId;
-    setIncomingMessages([]);
-    setDrawingStrokes([]);
-    setRoomUsers([]);
+
+    if (isChangingRoom) {
+      setIncomingMessages([]);
+      setDrawingStrokes([]);
+      setRoomUsers([]);
+    }
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log(`[WS] Joining room ${roomId}`);
       wsRef.current.send(
         JSON.stringify({
           type: "join",

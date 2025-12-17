@@ -110,31 +110,43 @@ wss.on("connection", (ws) => {
           participantId = message.participantId;
           const roomId = message.roomId;
 
-          // Leave previous room if any
-          if (currentRoom !== null && rooms[currentRoom]) {
-            rooms[currentRoom].delete(participantId);
-            broadcastToRoom(currentRoom, {
-              type: "user_left",
-              participantId,
-              roomId: currentRoom,
-            });
+          // Leave previous room only if actually changing rooms
+          if (
+            currentRoom !== null &&
+            currentRoom !== roomId &&
+            rooms[currentRoom]
+          ) {
+            // Only send user_left if user was actually in the previous room
+            if (rooms[currentRoom].has(participantId)) {
+              rooms[currentRoom].delete(participantId);
+              broadcastToRoom(currentRoom, {
+                type: "user_left",
+                participantId,
+                roomId: currentRoom,
+              });
+            }
           }
 
           // Join new room
           if (rooms[roomId]) {
+            const wasAlreadyInRoom =
+              currentRoom === roomId && rooms[roomId].has(participantId);
             currentRoom = roomId;
             rooms[roomId].set(participantId, { ws, joinedAt: Date.now() });
 
-            // Notify others in room (they should initiate WebRTC connection)
-            broadcastToRoom(
-              roomId,
-              {
-                type: "user_joined",
-                participantId,
+            // Only notify others if this is a new join (not a rejoin)
+            if (!wasAlreadyInRoom) {
+              // Notify others in room (they should initiate WebRTC connection)
+              broadcastToRoom(
                 roomId,
-              },
-              ws
-            );
+                {
+                  type: "user_joined",
+                  participantId,
+                  roomId,
+                },
+                ws
+              );
+            }
 
             // Send room users to joiner (joiner will initiate connections to existing users)
             const usersInRoom = Array.from(rooms[roomId].keys()).filter(
