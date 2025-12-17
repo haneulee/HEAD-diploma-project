@@ -448,7 +448,7 @@ export function Room1VideoOnly({
             {presenceCount} {presenceCount === 1 ? "person" : "people"} in room
           </span>
         </div>
-        <p className="room-note">🔇 Audio is OFF. Video only.</p>
+        {/* <p className="room-note">🔇 Audio is OFF. Video only.</p> */}
       </div>
     </div>
   );

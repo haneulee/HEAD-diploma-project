@@ -89,7 +89,7 @@ export function useWebSocket(participantId) {
         }
         break;
 
-      // Room 4: Text messages with content
+      // Room 3: Text messages with content
       case "message":
         setIncomingMessages((prev) => [
           ...prev,
@@ -245,7 +245,7 @@ export function useWebSocket(participantId) {
     }
   }, []);
 
-  // Send a text message (Room 4) - now includes text content
+  // Send a text message (Room 3) - now includes text content
   const sendMessage = useCallback((messageId, text) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(
@@ -265,7 +265,7 @@ export function useWebSocket(participantId) {
     }
   }, []);
 
-  // Send a drawing stroke (Room 6)
+  // Send a drawing stroke (Room 4)
   const sendStroke = useCallback((strokeData) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(
@@ -277,7 +277,7 @@ export function useWebSocket(participantId) {
     }
   }, []);
 
-  // Clear drawing (Room 6)
+  // Clear drawing (Room 4)
   const clearDrawing = useCallback(() => {
     setDrawingStrokes([]);
     if (wsRef.current?.readyState === WebSocket.OPEN) {

@@ -16,24 +16,24 @@
   --text-muted: #666666;
 
   /* Room colors */
-  --room1-color: #7c9885; /* Video Only - soft green */
+  --room1-color: #7c9885; /* Look - soft green */
   --room1-bg: rgba(124, 152, 133, 0.1);
-  --room2-color: #d4a574; /* Audio Only - warm orange */
+  --room2-color: #d4a574; /* Listen - warm orange */
   --room2-bg: rgba(212, 165, 116, 0.1);
-  --room4-color: #8fa8c8; /* Messages - soft blue */
-  --room4-bg: rgba(143, 168, 200, 0.1);
-  --room6-color: #c89b9b; /* Drawing - soft pink */
-  --room6-bg: rgba(200, 155, 155, 0.1);
+  --room3-color: #8fa8c8; /* Talk - soft blue */
+  --room3-bg: rgba(143, 168, 200, 0.1);
+  --room4-color: #c89b9b; /* Draw - soft pink */
+  --room4-bg: rgba(200, 155, 155, 0.1);
 
   /* Legacy zone colors (for compatibility) */
   --zone1-color: var(--room1-color);
   --zone1-bg: var(--room1-bg);
   --zone2-color: var(--room2-color);
   --zone2-bg: var(--room2-bg);
-  --zone3-color: var(--room4-color);
-  --zone3-bg: var(--room4-bg);
-  --zone4-color: var(--room6-color);
-  --zone4-bg: var(--room6-bg);
+  --zone3-color: var(--room3-color);
+  --zone3-bg: var(--room3-bg);
+  --zone4-color: var(--room4-color);
+  --zone4-bg: var(--room4-bg);
 
   --accent: #e8dcc4;
   --border: #333333;

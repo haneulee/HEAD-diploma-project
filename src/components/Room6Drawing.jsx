@@ -7,7 +7,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const COLORS = ["#ffffff", "#ff6b6b", "#4ecdc4", "#ffe66d", "#95e1d3"];
+const COLORS = [
+  "#ff0000", // red
+  "#ffff00", // yellow
+  "#00ff00", // green
+  "#0000ff", // blue
+  "#000000", // black
+];
 const LINE_WIDTH = 3;
 const ERASER_WIDTH = 20;
 
@@ -16,7 +22,7 @@ function drawStrokeOnCanvas(ctx, stroke) {
   if (!stroke.points || stroke.points.length < 2) return;
 
   ctx.beginPath();
-  ctx.strokeStyle = stroke.tool === "eraser" ? "#1a1a2e" : stroke.color;
+  ctx.strokeStyle = stroke.tool === "eraser" ? "#ffffff" : stroke.color;
   ctx.lineWidth =
     stroke.tool === "eraser" ? ERASER_WIDTH : stroke.width || LINE_WIDTH;
 
@@ -80,7 +86,7 @@ export function Room6Drawing({
     if (!ctx || !canvas) return;
 
     // Clear canvas
-    ctx.fillStyle = "#1a1a2e";
+    ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw all strokes
@@ -156,7 +162,7 @@ export function Room6Drawing({
       const ctx = contextRef.current;
       if (ctx) {
         ctx.beginPath();
-        ctx.strokeStyle = tool === "eraser" ? "#1a1a2e" : color;
+        ctx.strokeStyle = tool === "eraser" ? "#ffffff" : color;
         ctx.lineWidth = tool === "eraser" ? ERASER_WIDTH : LINE_WIDTH;
         ctx.moveTo(pos.x, pos.y);
       }
@@ -224,7 +230,7 @@ export function Room6Drawing({
   };
 
   return (
-    <div className="room6-content">
+    <div className="room4-content">
       <div className="drawing-toolbar">
         <div className="tool-group">
           <button
@@ -253,6 +259,17 @@ export function Room6Drawing({
               title={c}
             />
           ))}
+          <div className="color-picker-wrapper">
+            <label className="color-picker-label" title="Custom color">
+              <input
+                type="color"
+                className="color-picker"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+              />
+              <span className="color-picker-icon">🎨</span>
+            </label>
+          </div>
         </div>
 
         <button className="clear-btn" onClick={handleClear}>

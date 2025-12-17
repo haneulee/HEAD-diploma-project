@@ -162,8 +162,6 @@ function App() {
           <FinishView
             session={session}
             stats={getStats()}
-            onExportJSON={exportJSON}
-            onExportCSV={exportCSV}
             onRestart={handleRestart}
           />
         )}

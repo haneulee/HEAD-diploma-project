@@ -7,7 +7,7 @@
 import { AUTO_SAVE_INTERVAL, DATA_ENDPOINT } from "../config/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const STORAGE_KEY = "research_session_v3";
+const STORAGE_KEY = "research_session_v4"; // v4: Room IDs changed to 1,2,3,4
 
 // Generate anonymous participant ID
 function generateParticipantId() {
@@ -48,13 +48,13 @@ function createInitialSession() {
         speakingMs: 0,
         visits: 0,
       },
-      room4: {
+      room3: {
         totalTimeMs: 0,
         messagesSent: 0,
         totalMessageLength: 0,
         visits: 0,
       },
-      room6: {
+      room4: {
         totalTimeMs: 0,
         strokesCount: 0,
         visits: 0,
@@ -300,7 +300,7 @@ export function useSession() {
     [recordFirstInteraction]
   );
 
-  // Record message sent (Room 4) - marks as interaction
+  // Record message sent (Room 3) - marks as interaction
   const recordMessageSent = useCallback(
     (messageLength) => {
       recordFirstInteraction();
@@ -308,11 +308,11 @@ export function useSession() {
         ...prev,
         metrics: {
           ...prev.metrics,
-          room4: {
-            ...prev.metrics.room4,
-            messagesSent: prev.metrics.room4.messagesSent + 1,
+          room3: {
+            ...prev.metrics.room3,
+            messagesSent: prev.metrics.room3.messagesSent + 1,
             totalMessageLength:
-              prev.metrics.room4.totalMessageLength + messageLength,
+              prev.metrics.room3.totalMessageLength + messageLength,
           },
         },
       }));
@@ -320,16 +320,16 @@ export function useSession() {
     [recordFirstInteraction]
   );
 
-  // Record drawing stroke (Room 6) - marks as interaction
+  // Record drawing stroke (Room 4) - marks as interaction
   const recordStroke = useCallback(() => {
     recordFirstInteraction();
     setSession((prev) => ({
       ...prev,
       metrics: {
         ...prev.metrics,
-        room6: {
-          ...prev.metrics.room6,
-          strokesCount: prev.metrics.room6.strokesCount + 1,
+        room4: {
+          ...prev.metrics.room4,
+          strokesCount: prev.metrics.room4.strokesCount + 1,
         },
       },
     }));
@@ -415,8 +415,8 @@ export function useSession() {
   const getStats = useCallback(() => {
     const m = session.metrics;
     const avgMessageLength =
-      m.room4.messagesSent > 0
-        ? Math.round(m.room4.totalMessageLength / m.room4.messagesSent)
+      m.room3.messagesSent > 0
+        ? Math.round(m.room3.totalMessageLength / m.room3.messagesSent)
         : 0;
 
     const roomSequence = session.roomVisits.map((v) => v.roomId).join(" → ");
@@ -435,19 +435,19 @@ export function useSession() {
       // Room times
       timeVideoOnlyMs: m.room1.totalTimeMs,
       timeAudioOnlyMs: m.room2.totalTimeMs,
-      timeMessagesOnlyMs: m.room4.totalTimeMs,
-      timeDrawingMs: m.room6.totalTimeMs,
+      timeMessagesOnlyMs: m.room3.totalTimeMs,
+      timeDrawingMs: m.room4.totalTimeMs,
 
       // Room 2 metrics
       speakingEvents: m.room2.speakingEvents,
       speakingMs: m.room2.speakingMs,
 
-      // Room 4 metrics
-      messagesSent: m.room4.messagesSent,
+      // Room 3 metrics
+      messagesSent: m.room3.messagesSent,
       avgMessageLength,
 
-      // Room 6 metrics
-      strokesCount: m.room6.strokesCount,
+      // Room 4 metrics
+      strokesCount: m.room4.strokesCount,
 
       // Global interaction metrics
       firstInteractionDelayMs: session.firstInteractionDelayMs,
@@ -576,8 +576,8 @@ async function postSessionData(session, isFinal = false) {
 
   const m = session.metrics;
   const avgMessageLength =
-    m.room4.messagesSent > 0
-      ? Math.round(m.room4.totalMessageLength / m.room4.messagesSent)
+    m.room3.messagesSent > 0
+      ? Math.round(m.room3.totalMessageLength / m.room3.messagesSent)
       : 0;
 
   const exitWithoutInteractionCount = session.roomVisits.filter(
@@ -595,19 +595,19 @@ async function postSessionData(session, isFinal = false) {
     // Room times
     timeVideoOnlyMs: m.room1.totalTimeMs,
     timeAudioOnlyMs: m.room2.totalTimeMs,
-    timeMessagesOnlyMs: m.room4.totalTimeMs,
-    timeDrawingMs: m.room6.totalTimeMs,
+    timeMessagesOnlyMs: m.room3.totalTimeMs,
+    timeDrawingMs: m.room4.totalTimeMs,
 
     // Room 2
     speakingEvents: m.room2.speakingEvents,
     speakingMs: m.room2.speakingMs,
 
-    // Room 4
-    messagesSent: m.room4.messagesSent,
+    // Room 3
+    messagesSent: m.room3.messagesSent,
     avgMessageLength,
 
-    // Room 6
-    strokesCount: m.room6.strokesCount,
+    // Room 4
+    strokesCount: m.room4.strokesCount,
 
     // Global interaction metrics
     firstInteractionDelayMs: session.firstInteractionDelayMs,

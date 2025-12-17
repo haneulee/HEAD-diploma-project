@@ -1,206 +1,120 @@
 /**
  * Finish View Component
- * Shows session summary and export options
+ * Shows feedback form after session completion
  */
 
-import { ROOMS } from "../config/zones";
-import { useMemo } from "react";
+import { DATA_ENDPOINT } from "../config/api";
+import { useState } from "react";
 
-export function FinishView({
-  session,
-  stats,
-  onExportJSON,
-  onExportCSV,
-  onRestart,
-}) {
-  // Format duration
-  const formatDuration = (ms) => {
-    if (ms === null || ms === undefined) return "—";
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
+export function FinishView({ session, stats, onRestart }) {
+  const [feedback, setFeedback] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
-    if (minutes > 0) {
-      return `${minutes}m ${remainingSeconds}s`;
-    }
-    return `${seconds}s`;
+  const handleFeedbackChange = (e) => {
+    setFeedback(e.target.value);
   };
 
-  const formatTotalTime = (ms) => {
-    if (!ms) return "—";
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
+  const handleSubmit = async () => {
+    if (!feedback.trim()) return;
 
-    if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`;
+    setIsSubmitting(true);
+
+    try {
+      // Submit feedback along with session data
+      const payload = {
+        participantId: session.participantId,
+        feedback: feedback.trim(),
+        timestamp: new Date().toISOString(),
+      };
+
+      if (DATA_ENDPOINT) {
+        await fetch(DATA_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          mode: "no-cors",
+        });
+      }
+
+      setIsSubmitted(true);
+    } catch (err) {
+      console.error("[FinishView] Failed to submit feedback:", err);
+      // Still mark as submitted to allow user to continue
+      setIsSubmitted(true);
+    } finally {
+      setIsSubmitting(false);
     }
-    if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
-    }
-    return `${seconds}s`;
   };
-
-  // Calculate time per room for bars
-  const timePerRoom = useMemo(() => {
-    return {
-      1: stats.timeVideoOnlyMs || 0,
-      2: stats.timeAudioOnlyMs || 0,
-      4: stats.timeMessagesOnlyMs || 0,
-      6: stats.timeDrawingMs || 0,
-    };
-  }, [stats]);
-
-  const maxTime = useMemo(() => {
-    return Math.max(...Object.values(timePerRoom), 1);
-  }, [timePerRoom]);
 
   return (
     <div className="finish-view">
       <header className="finish-header">
         <h1>Session Complete</h1>
-        <p>Here's a summary of your participation</p>
+        <p>Thank you for participating</p>
       </header>
 
-      <div className="finish-summary">
-        <div className="summary-grid">
-          <div className="summary-item">
-            <p className="summary-label">Participant ID</p>
-            <p className="summary-value mono">{session.participantId}</p>
-          </div>
+      {!isSubmitted ? (
+        <div className="finish-feedback">
+          <div className="feedback-form">
+            <label htmlFor="feedback-input" className="feedback-label">
+              <h3>What did you experience in this test?</h3>
+              <p className="feedback-subtitle">
+                Please share your thoughts, feelings, or any additional comments
+                about your experience.
+              </p>
+            </label>
 
-          <div className="summary-item">
-            <p className="summary-label">Total Time</p>
-            <p className="summary-value">
-              {formatTotalTime(session.totalTimeMs)}
-            </p>
-          </div>
+            <textarea
+              id="feedback-input"
+              className="feedback-input"
+              value={feedback}
+              onChange={handleFeedbackChange}
+              placeholder="Type your feedback here..."
+              rows={8}
+              maxLength={2000}
+            />
 
-          <div className="summary-item">
-            <p className="summary-label">First Room</p>
-            <p className="summary-value">
-              {session.firstRoom ? `Room ${session.firstRoom}` : "—"}
-            </p>
-          </div>
-
-          <div className="summary-item">
-            <p className="summary-label">Room Changes</p>
-            <p className="summary-value">{stats.switchesCount}</p>
-          </div>
-
-          <div className="summary-item full-width">
-            <p className="summary-label">Time in each room</p>
-            <div className="room-time-bars">
-              {[1, 2, 4, 6].map((roomId) => {
-                const time = timePerRoom[roomId];
-                const percentage = (time / maxTime) * 100;
-                return (
-                  <div
-                    key={roomId}
-                    className="room-time-bar"
-                    data-room={roomId}
-                  >
-                    <span className="room-time-bar-label">
-                      {ROOMS[roomId]?.name || `Room ${roomId}`}
-                    </span>
-                    <div className="room-time-bar-track">
-                      <div
-                        className="room-time-bar-fill"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                    <span className="room-time-bar-value">
-                      {time > 0 ? formatDuration(time) : "—"}
-                    </span>
-                  </div>
-                );
-              })}
+            <div className="feedback-footer">
+              <span className="char-count">
+                {feedback.length} / 2000 characters
+              </span>
+              <div className="feedback-actions">
+                <button
+                  className="btn-submit-feedback"
+                  onClick={handleSubmit}
+                  disabled={!feedback.trim() || isSubmitting}
+                >
+                  {isSubmitting ? "Submitting..." : "Submit"}
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Room 2 Metrics */}
-          <div className="summary-item">
-            <p className="summary-label">Speaking Events</p>
-            <p className="summary-value">{stats.speakingEvents || 0}</p>
-          </div>
-
-          <div className="summary-item">
-            <p className="summary-label">Speaking Time</p>
-            <p className="summary-value">
-              {formatDuration(stats.speakingMs || 0)}
-            </p>
-          </div>
-
-          {/* Room 4 Metrics */}
-          <div className="summary-item">
-            <p className="summary-label">Messages Sent</p>
-            <p className="summary-value">{stats.messagesSent || 0}</p>
-          </div>
-
-          <div className="summary-item">
-            <p className="summary-label">Avg Message Length</p>
-            <p className="summary-value">{stats.avgMessageLength || 0} chars</p>
-          </div>
-
-          {/* Room 6 Metrics */}
-          <div className="summary-item">
-            <p className="summary-label">Drawing Strokes</p>
-            <p className="summary-value">{stats.strokesCount || 0}</p>
-          </div>
-
-          {/* Interaction Metrics */}
-          <div className="summary-item">
-            <p className="summary-label">First Interaction Delay</p>
-            <p className="summary-value">
-              {stats.firstInteractionDelayMs !== null
-                ? formatDuration(stats.firstInteractionDelayMs)
-                : "No interaction"}
-            </p>
-          </div>
-
-          <div className="summary-item">
-            <p className="summary-label">Idle Time (with others)</p>
-            <p className="summary-value">
-              {formatDuration(stats.idleTimeWithOthersMs || 0)}
-            </p>
-          </div>
-
-          <div className="summary-item">
-            <p className="summary-label">Exits w/o Interaction</p>
-            <p className="summary-value">{stats.exitWithoutInteraction || 0}</p>
-          </div>
-
-          <div className="summary-item full-width">
-            <p className="summary-label">Room Sequence</p>
-            <p className="summary-value mono" style={{ fontSize: "0.8rem" }}>
-              {stats.roomSequence || "—"}
-            </p>
+          <div className="feedback-restart">
+            <button className="btn-restart" onClick={onRestart}>
+              Start a new session
+            </button>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="finish-thank-you">
+          <div className="thank-you-content">
+            <h2>Thank you!</h2>
+            <p>Your feedback has been received.</p>
+            <button className="btn-restart" onClick={onRestart}>
+              Start a new session
+            </button>
+          </div>
+        </div>
+      )}
 
-      <div className="finish-actions">
-        <button className="btn-export" onClick={onExportJSON}>
-          Download JSON
-        </button>
-        <button className="btn-export" onClick={onExportCSV}>
-          Download CSV
-        </button>
-      </div>
-
-      <button className="btn-restart" onClick={onRestart}>
-        Start a new session
-      </button>
-
-      <p className="finish-note">
-        Your data has been automatically saved. No personal information is
-        stored.
-      </p>
-
-      <details className="debug-section">
-        <summary>Debug: Full session data</summary>
-        <pre>{JSON.stringify({ session, stats }, null, 2)}</pre>
-      </details>
+      {!isSubmitted && (
+        <p className="finish-note">
+          Your feedback is optional but greatly appreciated. No personal
+          information is stored.
+        </p>
+      )}
     </div>
   );
 }

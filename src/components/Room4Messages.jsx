@@ -127,7 +127,7 @@ export function Room4Messages({
   const charsRemaining = MAX_MESSAGE_LENGTH - input.length;
 
   return (
-    <div className="room4-content">
+    <div className="room3-content">
       <div className="messages-feed" ref={feedRef}>
         {messages.length === 0 && (
           <div className="messages-empty">

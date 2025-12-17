@@ -3,8 +3,6 @@
  * Renders the appropriate room screen based on current room
  */
 
-import { useEffect, useState } from "react";
-
 import { ROOMS } from "../config/zones";
 import { Room1VideoOnly } from "./Room1VideoOnly";
 import { Room2AudioOnly } from "./Room2AudioOnly";
@@ -35,12 +33,17 @@ export function RoomView({
 }) {
   const room = ROOMS[roomId];
 
+  // Safety check for invalid room ID
+  if (!room) {
+    return <div className="room-view">Invalid room. Please restart.</div>;
+  }
+
   return (
     <div className="room-view" data-room={roomId}>
       <header className="room-header">
         <div className="room-header-top">
           <div className="room-title">
-            <span className="room-badge">Room {roomId}</span>
+            {/* <span className="room-badge">Room {roomId}</span> */}
             <h2>{room.name}</h2>
           </div>
           <div className="room-header-actions">
@@ -56,9 +59,6 @@ export function RoomView({
           <div className="room-presence">
             <span className="presence-dot" />
             <span>{presenceCount} here</span>
-          </div>
-          <div className="room-timer">
-            <Timer key={roomId} />
           </div>
         </div>
       </header>
@@ -86,7 +86,7 @@ export function RoomView({
           />
         )}
 
-        {roomId === 4 && (
+        {roomId === 3 && (
           <Room4Messages
             participantId={participantId}
             presenceCount={presenceCount}
@@ -99,7 +99,7 @@ export function RoomView({
           />
         )}
 
-        {roomId === 6 && (
+        {roomId === 4 && (
           <Room6Drawing
             participantId={participantId}
             presenceCount={presenceCount}
@@ -114,24 +114,4 @@ export function RoomView({
       </div>
     </div>
   );
-}
-
-// Timer component - resets on room change via key prop
-function Timer() {
-  const [seconds, setSeconds] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSeconds((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  const formatted = `${mins.toString().padStart(2, "0")}:${secs
-    .toString()
-    .padStart(2, "0")}`;
-
-  return <span>⏱ {formatted}</span>;
 }

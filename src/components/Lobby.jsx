@@ -138,7 +138,7 @@ export function Lobby({
                 access.
               </p>
 
-              <ul className="permission-rules">
+              {/* <ul className="permission-rules">
                 {permissionModal.permission === "camera" ? (
                   <>
                     <li>Your camera will be ON</li>
@@ -154,7 +154,7 @@ export function Lobby({
                     <li>Only speaking detection is logged</li>
                   </>
                 )}
-              </ul>
+              </ul> */}
 
               {permissionError && (
                 <p className="permission-error">{permissionError}</p>
@@ -177,24 +177,11 @@ export function Lobby({
 }
 
 function RoomCard({ room, presenceCount, onClick }) {
-  const requiresPermission = roomRequiresPermission(room.id);
-
   return (
     <button className="room-card" data-room={room.id} onClick={onClick}>
-      <div className="room-card-header">
-        <span className="room-card-number">Room {room.id}</span>
-        {requiresPermission && (
-          <span className="room-card-permission">
-            {requiresPermission === "camera" ? "📹" : "🎤"} Required
-          </span>
-        )}
-      </div>
-
-      <div className="room-card-icon">{room.icon}</div>
-      <h3>{room.name}</h3>
-      <p className="room-card-desc">{room.shortDesc}</p>
-
-      <div className="room-card-rules">{room.rules}</div>
+      <h3>
+        <span className="room-card-icon">{room.icon}</span> &nbsp; {room.name}
+      </h3>
 
       <div className="room-card-footer">
         <div className="room-card-presence">

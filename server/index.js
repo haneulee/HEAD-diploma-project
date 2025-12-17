@@ -35,11 +35,11 @@ const wss = new WebSocketServer({ server });
 const rooms = {
   1: new Map(), // participantId -> { ws, joinedAt }
   2: new Map(),
+  3: new Map(),
   4: new Map(),
-  6: new Map(),
 };
 
-// Drawing history for Room 6 (keep last N strokes for new joiners)
+// Drawing history for Room 4 (keep last N strokes for new joiners)
 const MAX_DRAWING_HISTORY = 100;
 let drawingHistory = [];
 
@@ -48,8 +48,8 @@ function getRoomCounts() {
   return {
     1: rooms[1].size,
     2: rooms[2].size,
+    3: rooms[3].size,
     4: rooms[4].size,
-    6: rooms[6].size,
   };
 }
 
@@ -149,7 +149,7 @@ wss.on("connection", (ws) => {
             );
 
             // If joining drawing room, send recent history
-            if (roomId === 6 && drawingHistory.length > 0) {
+            if (roomId === 4 && drawingHistory.length > 0) {
               ws.send(
                 JSON.stringify({
                   type: "drawing_history",
@@ -230,13 +230,13 @@ wss.on("connection", (ws) => {
           break;
         }
 
-        // ==================== Room 4: Messages ====================
+        // ==================== Room 3: Messages (Talk) ====================
 
         case "message": {
-          // Room 4: Text messages - broadcast to all in room
-          if (currentRoom === 4 && participantId) {
+          // Room 3: Text messages - broadcast to all in room
+          if (currentRoom === 3 && participantId) {
             broadcastToRoom(
-              4,
+              3,
               {
                 type: "message",
                 participantId,
@@ -253,11 +253,11 @@ wss.on("connection", (ws) => {
           break;
         }
 
-        // ==================== Room 6: Drawing ====================
+        // ==================== Room 4: Drawing (Draw) ====================
 
         case "draw_stroke": {
-          // Room 6: Drawing strokes
-          if (currentRoom === 6 && participantId) {
+          // Room 4: Drawing strokes
+          if (currentRoom === 4 && participantId) {
             const stroke = {
               id: message.strokeId,
               participantId,
@@ -276,7 +276,7 @@ wss.on("connection", (ws) => {
 
             // Broadcast to everyone (including sender, for sync)
             broadcastToRoom(
-              6,
+              4,
               {
                 type: "draw_stroke",
                 stroke,
@@ -288,10 +288,10 @@ wss.on("connection", (ws) => {
         }
 
         case "clear_drawing": {
-          // Room 6: Clear canvas
-          if (currentRoom === 6) {
+          // Room 4: Clear canvas
+          if (currentRoom === 4) {
             drawingHistory = [];
-            broadcastToRoom(6, {
+            broadcastToRoom(4, {
               type: "clear_drawing",
               participantId,
             });

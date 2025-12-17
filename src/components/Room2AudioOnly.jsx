@@ -554,7 +554,7 @@ export function Room2AudioOnly({
         ))}
       </div>
 
-      <div className="volume-visualizer">
+      {/* <div className="volume-visualizer">
         <div className="volume-meter-horizontal">
           <div
             className="volume-bar-horizontal"
@@ -567,7 +567,7 @@ export function Room2AudioOnly({
           />
         </div>
         <p className="volume-label">Your mic level</p>
-      </div>
+      </div> */}
 
       <div className="room-info">
         <div className="presence-indicator">
@@ -576,7 +576,7 @@ export function Room2AudioOnly({
             {presenceCount} {presenceCount === 1 ? "person" : "people"} in room
           </span>
         </div>
-        <p className="room-note">📷 No video. Audio only.</p>
+        {/* <p className="room-note">📷 No video. Audio only.</p> */}
       </div>
     </div>
   );
