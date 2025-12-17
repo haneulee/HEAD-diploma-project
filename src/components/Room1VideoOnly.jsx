@@ -23,7 +23,6 @@ export function Room1VideoOnly({
 }) {
   const [hasPermission, setHasPermission] = useState(null);
   const [error, setError] = useState(null);
-  const [isCameraOn, setIsCameraOn] = useState(false);
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({}); // peerId -> MediaStream
 
@@ -84,7 +83,6 @@ export function Room1VideoOnly({
       }
 
       setHasPermission(true);
-      setIsCameraOn(true);
 
       // Room 1 has NO interaction possible - track idle time with others
       idleTrackingRef.current = setInterval(() => {
@@ -106,7 +104,7 @@ export function Room1VideoOnly({
       );
       return null;
     }
-  }, [onCameraTime]);
+  }, [onIdleWithOthers]);
 
   // Create peer connection
   const createPeerConnection = useCallback(
@@ -308,8 +306,6 @@ export function Room1VideoOnly({
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = null;
     }
-
-    setIsCameraOn(false);
   }, []);
 
   // Ensure local video element has the stream
