@@ -116,8 +116,13 @@ export function Room4Messages({
     setInput("");
   }, [input, participantId, onMessageSent, sendWsMessage]);
 
-  // Handle enter key
+  // Handle enter key (check for Korean IME composition)
   const handleKeyDown = (e) => {
+    // Skip if composing (Korean/Japanese/Chinese input)
+    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();

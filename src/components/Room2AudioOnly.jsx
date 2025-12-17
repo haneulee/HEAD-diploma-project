@@ -186,6 +186,11 @@ export function Room2AudioOnly({
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
+        audioCaptureDefaults: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
 
       roomRef.current = room;
@@ -247,8 +252,11 @@ export function Room2AudioOnly({
       console.log("[LiveKit] Connected to room:", room.name);
 
       // Publish local audio track (no video)
+      // DTX helps reduce echo and bandwidth when not speaking
       await room.localParticipant.publishTrack(audioTrack, {
         name: "microphone",
+        dtx: true, // Discontinuous transmission - reduces echo feedback
+        red: true, // Redundant encoding for better quality
       });
 
       updateParticipants();

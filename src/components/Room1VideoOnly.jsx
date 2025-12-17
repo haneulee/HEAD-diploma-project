@@ -199,12 +199,13 @@ export function Room1VideoOnly({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Attach local video when track changes
+  // Attach local video when track changes or permission granted
   useEffect(() => {
-    if (localVideoRef.current && localVideoTrack) {
+    if (localVideoRef.current && localVideoTrack && hasPermission) {
+      console.log("[LiveKit] Attaching local video track");
       localVideoTrack.attach(localVideoRef.current);
     }
-  }, [localVideoTrack]);
+  }, [localVideoTrack, hasPermission]);
 
   // Permission denied view
   if (hasPermission === false) {
