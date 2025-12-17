@@ -138,23 +138,14 @@ export function Lobby({
                 access.
               </p>
 
-              {/* <ul className="permission-rules">
-                {permissionModal.permission === "camera" ? (
-                  <>
-                    <li>Your camera will be ON</li>
-                    <li>Microphone is always OFF</li>
-                    <li>Only you can see your preview</li>
-                    <li>No video is stored or shared</li>
-                  </>
-                ) : (
-                  <>
-                    <li>Your microphone will be ON</li>
-                    <li>Camera is never used</li>
-                    <li>No audio is stored</li>
-                    <li>Only speaking detection is logged</li>
-                  </>
-                )}
-              </ul> */}
+              {permissionModal.permission === "microphone" && (
+                <div className="permission-note">
+                  <p>
+                    💡 <strong>Tip:</strong> Use headphones or earbuds to
+                    prevent audio feedback if others are nearby.
+                  </p>
+                </div>
+              )}
 
               {permissionError && (
                 <p className="permission-error">{permissionError}</p>

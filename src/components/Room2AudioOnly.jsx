@@ -293,13 +293,96 @@ export function Room2AudioOnly({
   // Start microphone
   const startMic = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      // First request permission with default device to get device labels
+      let stream = await navigator.mediaDevices.getUserMedia({
         video: false,
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true, // Prevent feedback by controlling gain automatically
         },
       });
+
+      // Log which device is currently being used
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const settings = audioTracks[0].getSettings();
+        console.log("[Room2] Current audio input device:", {
+          deviceId: settings.deviceId,
+          label: audioTracks[0].label,
+        });
+      }
+
+      // Now enumerate devices to find Bluetooth headphones/earbuds
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(
+          (device) => device.kind === "audioinput" && device.label
+        );
+
+        console.log("[Room2] Available audio input devices:", audioInputs);
+
+        // Find Bluetooth devices (works on Windows and Mac)
+        // Common patterns: "bluetooth", "bt", "wireless", "airpods", "headphone"
+        const bluetoothDevice = audioInputs.find((device) => {
+          const label = device.label.toLowerCase();
+          return (
+            label.includes("bluetooth") ||
+            label.includes("bt ") ||
+            label.includes("wireless") ||
+            label.includes("airpods") ||
+            (label.includes("headphone") && !label.includes("built-in")) ||
+            (label.includes("headset") && !label.includes("built-in"))
+          );
+        });
+
+        const currentDeviceId = audioTracks[0]?.getSettings().deviceId;
+
+        // If we found a Bluetooth device and it's not the current device, switch to it
+        if (bluetoothDevice && currentDeviceId !== bluetoothDevice.deviceId) {
+          console.log(
+            "[Room2] Found Bluetooth device, switching to:",
+            bluetoothDevice.label
+          );
+
+          // Stop the current stream
+          stream.getTracks().forEach((track) => track.stop());
+
+          // Request stream with the Bluetooth device
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: {
+              deviceId: { exact: bluetoothDevice.deviceId },
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true, // Prevent feedback by controlling gain automatically
+            },
+          });
+
+          const newAudioTracks = stream.getAudioTracks();
+          if (newAudioTracks.length > 0) {
+            console.log(
+              "[Room2] Now using Bluetooth device:",
+              newAudioTracks[0].label
+            );
+          }
+        } else if (!bluetoothDevice) {
+          // No Bluetooth device found, use default (built-in microphone)
+          console.log(
+            "[Room2] No Bluetooth device found, using default microphone"
+          );
+        } else {
+          // Bluetooth device is already in use
+          console.log(
+            "[Room2] Bluetooth device already in use:",
+            bluetoothDevice.label
+          );
+        }
+      } catch (enumErr) {
+        console.warn("[Room2] Could not enumerate devices:", enumErr);
+        // Continue with the default stream (built-in microphone)
+        console.log("[Room2] Using default microphone");
+      }
 
       localStreamRef.current = stream; // Store in ref for handlers
 
