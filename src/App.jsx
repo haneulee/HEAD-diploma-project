@@ -48,11 +48,9 @@ function App() {
     joinRoom: wsJoinRoom,
     leaveRoom: wsLeaveRoom,
     sendMessage: wsSendMessage,
-    sendRtcSignal,
     sendStroke: wsSendStroke,
     clearDrawing: wsClearDrawing,
     clearMessages: wsClearMessages,
-    registerHandlers,
     getPresenceCount,
   } = useWebSocket(session.participantId);
 
@@ -140,8 +138,6 @@ function App() {
               hasInteracted={hasInteracted}
               // WebSocket data & callbacks
               sendWsMessage={wsSendMessage}
-              sendRtcSignal={sendRtcSignal}
-              registerHandlers={registerHandlers}
               incomingMessages={incomingMessages}
               clearMessages={wsClearMessages}
               drawingStrokes={drawingStrokes}

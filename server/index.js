@@ -1,6 +1,6 @@
 /**
  * WebSocket Server for Research Prototype
- * Handles: presence, WebRTC signaling, messages, drawing sync
+ * Handles: presence, LiveKit tokens, messages, drawing sync
  *
  * Run: node server/index.js
  * Default port: 3001
@@ -8,24 +8,89 @@
 
 /* global process */
 
+import { AccessToken } from "livekit-server-sdk";
 import { WebSocketServer } from "ws";
 import { createServer } from "http";
 
 const PORT = process.env.PORT || 3001;
 
+// LiveKit configuration (get from https://cloud.livekit.io)
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "";
+
+// Generate LiveKit access token
+function generateLiveKitToken(roomName, participantIdentity) {
+  if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+    throw new Error("LiveKit API credentials not configured");
+  }
+
+  const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+    identity: participantIdentity,
+    ttl: "1h", // Token valid for 1 hour
+  });
+
+  token.addGrant({
+    room: roomName,
+    roomJoin: true,
+    canPublish: true,
+    canSubscribe: true,
+    canPublishData: true,
+  });
+
+  return token.toJwt();
+}
+
 // Create HTTP server
-const server = createServer((req, res) => {
-  // CORS headers for health check
+const server = createServer(async (req, res) => {
+  // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Content-Type", "application/json");
 
-  if (req.url === "/health") {
+  // Handle preflight
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  // Health check endpoint
+  if (url.pathname === "/health") {
     res.writeHead(200);
     res.end(JSON.stringify({ status: "ok", rooms: getRoomCounts() }));
-  } else {
-    res.writeHead(404);
-    res.end(JSON.stringify({ error: "Not found" }));
+    return;
   }
+
+  // LiveKit token endpoint
+  if (url.pathname === "/livekit/token") {
+    const room = url.searchParams.get("room");
+    const identity = url.searchParams.get("identity");
+
+    if (!room || !identity) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "Missing room or identity parameter" }));
+      return;
+    }
+
+    try {
+      const token = await generateLiveKitToken(room, identity);
+      res.writeHead(200);
+      res.end(JSON.stringify({ token }));
+      console.log(`[LiveKit] Token generated for ${identity} in room ${room}`);
+    } catch (err) {
+      console.error("[LiveKit] Token error:", err);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // 404 for unknown routes
+  res.writeHead(404);
+  res.end(JSON.stringify({ error: "Not found" }));
 });
 
 // Create WebSocket server

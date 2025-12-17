@@ -1,21 +1,17 @@
 /**
- * Room 2: Audio Only (WebRTC Multi-Peer)
+ * Room 2: Audio Only (LiveKit)
  * Microphone REQUIRED, no video
- * Uses WebRTC for audio streaming + Web Audio API for speaking detection
+ * Uses LiveKit for audio streaming + Web Audio API for speaking detection
  */
 
+import { Room, RoomEvent, Track, createLocalAudioTrack } from "livekit-client";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import { API_URL } from "../config/api";
+import { LIVEKIT_URL } from "../config/livekit";
 
 const VOLUME_THRESHOLD = 0.02;
 const SPEECH_DEBOUNCE_MS = 200;
-
-// STUN servers for NAT traversal
-const RTC_CONFIG = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
-};
 
 export function Room2AudioOnly({
   participantId,
@@ -23,34 +19,27 @@ export function Room2AudioOnly({
   onSpeakingEvent,
   onIdleWithOthers,
   hasInteracted,
-  sendRtcSignal,
-  registerHandlers,
 }) {
   const [hasPermission, setHasPermission] = useState(null);
   const [error, setError] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volume, setVolume] = useState(0);
-  const [remotePeers, setRemotePeers] = useState({}); // peerId -> { speaking: boolean }
+  const [remoteParticipants, setRemoteParticipants] = useState([]);
+  const [isConnecting, setIsConnecting] = useState(false);
 
+  const roomRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const localAudioTrackRef = useRef(null);
 
   const idleTrackingRef = useRef(null);
-
   const speakingStartRef = useRef(null);
   const speechTimeoutRef = useRef(null);
 
-  const peersRef = useRef({}); // peerId -> RTCPeerConnection
-  const remoteAudioRefs = useRef({}); // peerId -> HTMLAudioElement
-  const localStreamRef = useRef(null); // Ref for handlers to access stream
-  const pendingUsersRef = useRef([]); // Users to connect when stream is ready
-  const pendingOffersRef = useRef([]); // Offers to process when stream is ready
   const presenceCountRef = useRef(presenceCount);
   const hasInteractedRef = useRef(hasInteracted);
-
   const onSpeakingEventRef = useRef(onSpeakingEvent);
-  onSpeakingEventRef.current = onSpeakingEvent;
 
   // Keep refs updated
   useEffect(() => {
@@ -60,6 +49,20 @@ export function Room2AudioOnly({
   useEffect(() => {
     hasInteractedRef.current = hasInteracted;
   }, [hasInteracted]);
+
+  useEffect(() => {
+    onSpeakingEventRef.current = onSpeakingEvent;
+  }, [onSpeakingEvent]);
+
+  // Update remote participants list
+  const updateParticipants = useCallback(() => {
+    if (roomRef.current) {
+      const participants = Array.from(
+        roomRef.current.remoteParticipants.values()
+      );
+      setRemoteParticipants(participants);
+    }
+  }, []);
 
   // Analyze audio for speaking detection
   const startAnalyzing = useCallback(() => {
@@ -101,7 +104,6 @@ export function Room2AudioOnly({
               speakingStartRef.current = null;
               setIsSpeaking(false);
             }
-            speechTimeoutRef.current = null;
           }, SPEECH_DEBOUNCE_MS);
         }
       }
@@ -112,365 +114,188 @@ export function Room2AudioOnly({
     analyze();
   }, []);
 
-  // Create peer connection for audio
-  const createPeerConnection = useCallback(
-    (peerId, stream) => {
-      if (peersRef.current[peerId]) {
-        return peersRef.current[peerId];
-      }
-
-      console.log(`[RTC Audio] Creating peer connection to ${peerId}`);
-      const pc = new RTCPeerConnection(RTC_CONFIG);
-
-      // Add local audio track
-      if (stream) {
-        stream.getTracks().forEach((track) => {
-          pc.addTrack(track, stream);
-        });
-      }
-
-      // Handle ICE candidates
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          sendRtcSignal({
-            type: "rtc_ice_candidate",
-            targetId: peerId,
-            candidate: event.candidate,
-          });
-        }
-      };
-
-      // Handle remote audio stream
-      pc.ontrack = (event) => {
-        console.log(`[RTC Audio] Received audio from ${peerId}`);
-        const [remoteStream] = event.streams;
-        if (remoteStream) {
-          // Create audio element for playback
-          let audioEl = remoteAudioRefs.current[peerId];
-          if (!audioEl) {
-            audioEl = new Audio();
-            audioEl.autoplay = true;
-            remoteAudioRefs.current[peerId] = audioEl;
-          }
-          audioEl.srcObject = remoteStream;
-
-          setRemotePeers((prev) => ({
-            ...prev,
-            [peerId]: { speaking: false },
-          }));
-        }
-      };
-
-      // Handle connection state
-      pc.onconnectionstatechange = () => {
-        console.log(`[RTC Audio] ${peerId} state: ${pc.connectionState}`);
-        if (
-          pc.connectionState === "disconnected" ||
-          pc.connectionState === "failed" ||
-          pc.connectionState === "closed"
-        ) {
-          removePeer(peerId);
-        }
-      };
-
-      peersRef.current[peerId] = pc;
-      return pc;
-    },
-    [sendRtcSignal]
-  );
-
-  // Remove peer connection
-  const removePeer = useCallback((peerId) => {
-    const pc = peersRef.current[peerId];
-    if (pc) {
-      pc.close();
-      delete peersRef.current[peerId];
+  // Connect to LiveKit room
+  const connectToRoom = useCallback(async () => {
+    if (isConnecting || roomRef.current?.state === "connected") {
+      return;
     }
 
-    const audioEl = remoteAudioRefs.current[peerId];
-    if (audioEl) {
-      audioEl.srcObject = null;
-      delete remoteAudioRefs.current[peerId];
-    }
+    setIsConnecting(true);
 
-    setRemotePeers((prev) => {
-      const newPeers = { ...prev };
-      delete newPeers[peerId];
-      return newPeers;
-    });
-
-    console.log(`[RTC Audio] Removed peer ${peerId}`);
-  }, []);
-
-  // Connect to a peer
-  const connectToPeer = useCallback(
-    async (peerId, stream) => {
-      // Skip if already connected
-      if (peersRef.current[peerId]) {
-        console.log(`[RTC Audio] Already connected to ${peerId}, skipping`);
-        return;
-      }
-
-      const pc = createPeerConnection(peerId, stream);
-
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        sendRtcSignal({
-          type: "rtc_offer",
-          targetId: peerId,
-          offer: pc.localDescription,
-        });
-
-        console.log(`[RTC Audio] Sent offer to ${peerId}`);
-      } catch (err) {
-        console.error(`[RTC Audio] Error creating offer:`, err);
-        removePeer(peerId);
-      }
-    },
-    [createPeerConnection, sendRtcSignal, removePeer]
-  );
-
-  // Handle incoming offer
-  const handleOffer = useCallback(
-    async (fromId, offer, stream) => {
-      console.log(`[RTC Audio] Received offer from ${fromId}`);
-
-      // If connection exists, close it first to allow renegotiation
-      if (peersRef.current[fromId]) {
-        console.log(
-          `[RTC Audio] Closing existing connection to ${fromId} for renegotiation`
-        );
-        peersRef.current[fromId].close();
-        delete peersRef.current[fromId];
-      }
-
-      const pc = createPeerConnection(fromId, stream);
-
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        sendRtcSignal({
-          type: "rtc_answer",
-          targetId: fromId,
-          answer: pc.localDescription,
-        });
-      } catch (err) {
-        console.error(`[RTC Audio] Error handling offer:`, err);
-        removePeer(fromId);
-      }
-    },
-    [createPeerConnection, sendRtcSignal, removePeer]
-  );
-
-  // Handle incoming answer
-  const handleAnswer = useCallback(async (fromId, answer) => {
-    const pc = peersRef.current[fromId];
-    if (pc) {
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      } catch (err) {
-        console.error(`[RTC Audio] Error handling answer:`, err);
-      }
-    }
-  }, []);
-
-  // Handle ICE candidate
-  const handleIceCandidate = useCallback(async (fromId, candidate) => {
-    const pc = peersRef.current[fromId];
-    if (pc && candidate) {
-      try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (err) {
-        console.error(`[RTC Audio] Error adding ICE candidate:`, err);
-      }
-    }
-  }, []);
-
-  // Start microphone
-  const startMic = useCallback(async () => {
     try {
-      // First request permission with default device to get device labels
-      let stream = await navigator.mediaDevices.getUserMedia({
-        video: false,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true, // Prevent feedback by controlling gain automatically
-        },
+      // First get device list to find Bluetooth headphones
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter((d) => d.kind === "audioinput");
+
+      console.log(
+        "[LiveKit] Available audio devices:",
+        audioInputs.map((d) => d.label)
+      );
+
+      // Find Bluetooth device if available
+      let preferredDeviceId = undefined;
+      const bluetoothDevice = audioInputs.find((d) => {
+        const label = d.label.toLowerCase();
+        return (
+          (label.includes("bluetooth") ||
+            label.includes("airpods") ||
+            label.includes("headphone") ||
+            label.includes("headset")) &&
+          !label.includes("built-in")
+        );
       });
 
-      // Log which device is currently being used
-      const audioTracks = stream.getAudioTracks();
-      if (audioTracks.length > 0) {
-        const settings = audioTracks[0].getSettings();
-        console.log("[Room2] Current audio input device:", {
-          deviceId: settings.deviceId,
-          label: audioTracks[0].label,
-        });
+      if (bluetoothDevice) {
+        preferredDeviceId = bluetoothDevice.deviceId;
+        console.log("[LiveKit] Using Bluetooth device:", bluetoothDevice.label);
       }
 
-      // Now enumerate devices to find Bluetooth headphones/earbuds
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const audioInputs = devices.filter(
-          (device) => device.kind === "audioinput" && device.label
-        );
+      // Create local audio track
+      const audioTrack = await createLocalAudioTrack({
+        deviceId: preferredDeviceId,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      });
 
-        console.log("[Room2] Available audio input devices:", audioInputs);
-
-        // Find Bluetooth devices (works on Windows and Mac)
-        // Common patterns: "bluetooth", "bt", "wireless", "airpods", "headphone"
-        const bluetoothDevice = audioInputs.find((device) => {
-          const label = device.label.toLowerCase();
-          return (
-            label.includes("bluetooth") ||
-            label.includes("bt ") ||
-            label.includes("wireless") ||
-            label.includes("airpods") ||
-            (label.includes("headphone") && !label.includes("built-in")) ||
-            (label.includes("headset") && !label.includes("built-in"))
-          );
-        });
-
-        const currentDeviceId = audioTracks[0]?.getSettings().deviceId;
-
-        // If we found a Bluetooth device and it's not the current device, switch to it
-        if (bluetoothDevice && currentDeviceId !== bluetoothDevice.deviceId) {
-          console.log(
-            "[Room2] Found Bluetooth device, switching to:",
-            bluetoothDevice.label
-          );
-
-          // Stop the current stream
-          stream.getTracks().forEach((track) => track.stop());
-
-          // Request stream with the Bluetooth device
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: false,
-            audio: {
-              deviceId: { exact: bluetoothDevice.deviceId },
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true, // Prevent feedback by controlling gain automatically
-            },
-          });
-
-          const newAudioTracks = stream.getAudioTracks();
-          if (newAudioTracks.length > 0) {
-            console.log(
-              "[Room2] Now using Bluetooth device:",
-              newAudioTracks[0].label
-            );
-          }
-        } else if (!bluetoothDevice) {
-          // No Bluetooth device found, use default (built-in microphone)
-          console.log(
-            "[Room2] No Bluetooth device found, using default microphone"
-          );
-        } else {
-          // Bluetooth device is already in use
-          console.log(
-            "[Room2] Bluetooth device already in use:",
-            bluetoothDevice.label
-          );
-        }
-      } catch (enumErr) {
-        console.warn("[Room2] Could not enumerate devices:", enumErr);
-        // Continue with the default stream (built-in microphone)
-        console.log("[Room2] Using default microphone");
-      }
-
-      localStreamRef.current = stream; // Store in ref for handlers
-
-      // Connect to any pending users that arrived before stream was ready
-      if (pendingUsersRef.current.length > 0) {
-        console.log(
-          "[Room2] Connecting to pending users:",
-          pendingUsersRef.current
-        );
-        pendingUsersRef.current.forEach((userId) => {
-          connectToPeer(userId, stream);
-        });
-        pendingUsersRef.current = [];
-      }
-
-      // Process any pending offers that arrived before stream was ready
-      if (pendingOffersRef.current.length > 0) {
-        console.log(
-          "[Room2] Processing pending offers:",
-          pendingOffersRef.current.length
-        );
-        pendingOffersRef.current.forEach(({ fromId, offer }) => {
-          handleOffer(fromId, offer, stream);
-        });
-        pendingOffersRef.current = [];
-      }
-
-      // Set up Web Audio API for volume analysis
-      const audioContext = new (window.AudioContext ||
-        window.webkitAudioContext)();
-      audioContextRef.current = audioContext;
-
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.8;
-      analyserRef.current = analyser;
-
-      const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-
-      startAnalyzing();
-
+      localAudioTrackRef.current = audioTrack;
       setHasPermission(true);
 
-      // Track idle time with others (when not interacted and others present)
+      // Set up audio analysis for speaking detection
+      const stream = new MediaStream([audioTrack.mediaStreamTrack]);
+      audioContextRef.current = new AudioContext();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+      source.connect(analyserRef.current);
+      startAnalyzing();
+
+      // Get token from server
+      const tokenResponse = await fetch(
+        `${API_URL}/livekit/token?room=audio-room&identity=${participantId}`
+      );
+
+      if (!tokenResponse.ok) {
+        throw new Error("Failed to get LiveKit token");
+      }
+
+      const { token } = await tokenResponse.json();
+
+      // Create and connect to room
+      const room = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+      });
+
+      roomRef.current = room;
+
+      // Set up event handlers
+      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        console.log(
+          `[LiveKit] Track subscribed: ${track.kind} from ${participant.identity}`
+        );
+
+        // Auto-play audio tracks
+        if (track.kind === Track.Kind.Audio) {
+          const audioElement = track.attach();
+          audioElement.play().catch(console.error);
+        }
+
+        updateParticipants();
+      });
+
+      room.on(
+        RoomEvent.TrackUnsubscribed,
+        (track, publication, participant) => {
+          console.log(
+            `[LiveKit] Track unsubscribed: ${track.kind} from ${participant.identity}`
+          );
+          track.detach();
+          updateParticipants();
+        }
+      );
+
+      room.on(RoomEvent.ParticipantConnected, (participant) => {
+        console.log(`[LiveKit] Participant connected: ${participant.identity}`);
+        updateParticipants();
+      });
+
+      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        console.log(
+          `[LiveKit] Participant disconnected: ${participant.identity}`
+        );
+        updateParticipants();
+      });
+
+      room.on(RoomEvent.Disconnected, () => {
+        console.log("[LiveKit] Disconnected from room");
+        setRemoteParticipants([]);
+      });
+
+      room.on(RoomEvent.Reconnecting, () => {
+        console.log("[LiveKit] Reconnecting...");
+      });
+
+      room.on(RoomEvent.Reconnected, () => {
+        console.log("[LiveKit] Reconnected!");
+        updateParticipants();
+      });
+
+      // Connect to room
+      await room.connect(LIVEKIT_URL, token);
+      console.log("[LiveKit] Connected to room:", room.name);
+
+      // Publish local audio track (no video)
+      await room.localParticipant.publishTrack(audioTrack, {
+        name: "microphone",
+      });
+
+      updateParticipants();
+
+      // Start idle tracking
       idleTrackingRef.current = setInterval(() => {
-        if (presenceCountRef.current > 1 && !hasInteractedRef.current()) {
+        // If there are others in the room and user hasn't interacted, count as idle
+        if (presenceCountRef.current > 1 && !hasInteractedRef.current) {
           onIdleWithOthers(1000);
         }
       }, 1000);
-
-      return stream;
     } catch (err) {
-      console.error("[Room2] Microphone error:", err);
+      console.error("[LiveKit] Connection error:", err);
       setHasPermission(false);
       setError(
         err.name === "NotAllowedError"
           ? "Microphone permission denied. Please allow microphone access to enter this room."
-          : "Could not access microphone. Please check your device settings."
+          : err.message || "Could not connect to audio room. Please try again."
       );
-      return null;
+    } finally {
+      setIsConnecting(false);
     }
-  }, [startAnalyzing]);
+  }, [
+    participantId,
+    onIdleWithOthers,
+    updateParticipants,
+    startAnalyzing,
+    isConnecting,
+  ]);
 
-  // Stop microphone and cleanup
-  const stopMic = useCallback(() => {
-    console.log("[Room2] Stopping mic and closing connections");
-
-    // Record final speaking event if still speaking
-    if (speakingStartRef.current) {
-      const speakingDuration = Date.now() - speakingStartRef.current;
-      if (speakingDuration > 100) {
-        onSpeakingEvent(speakingDuration);
-      }
-      speakingStartRef.current = null;
-    }
+  // Disconnect and cleanup
+  const disconnect = useCallback(() => {
+    console.log("[LiveKit] Disconnecting...");
 
     if (idleTrackingRef.current) {
       clearInterval(idleTrackingRef.current);
       idleTrackingRef.current = null;
     }
-    if (speechTimeoutRef.current) {
-      clearTimeout(speechTimeoutRef.current);
-      speechTimeoutRef.current = null;
-    }
+
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
+    }
+
+    if (speechTimeoutRef.current) {
+      clearTimeout(speechTimeoutRef.current);
+      speechTimeoutRef.current = null;
     }
 
     if (audioContextRef.current) {
@@ -478,102 +303,25 @@ export function Room2AudioOnly({
       audioContextRef.current = null;
     }
 
-    // Close all peer connections
-    Object.keys(peersRef.current).forEach((peerId) => {
-      console.log("[Room2] Closing peer connection:", peerId);
-      peersRef.current[peerId].close();
-    });
-    peersRef.current = {};
-
-    // Clean up audio elements
-    Object.values(remoteAudioRefs.current).forEach((audioEl) => {
-      audioEl.srcObject = null;
-    });
-    remoteAudioRefs.current = {};
-
-    // Clear pending queues
-    pendingUsersRef.current = [];
-    pendingOffersRef.current = [];
-
-    setRemotePeers({});
-
-    // Stop local stream using ref (more reliable than state)
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => {
-        console.log("[Room2] Stopping track:", track.kind);
-        track.stop();
-      });
-      localStreamRef.current = null;
+    if (localAudioTrackRef.current) {
+      localAudioTrackRef.current.stop();
+      localAudioTrackRef.current = null;
     }
 
-    setIsSpeaking(false);
-    setVolume(0);
-  }, [onSpeakingEvent]);
-
-  // Register handlers immediately on mount (before mic starts)
-  useEffect(() => {
-    if (registerHandlers) {
-      registerHandlers({
-        onRoomUsers: (users) => {
-          console.log("[Room2] Got room users:", users);
-          users.forEach((userId) => {
-            if (userId !== participantId) {
-              if (localStreamRef.current) {
-                // Stream ready, connect now
-                connectToPeer(userId, localStreamRef.current);
-              } else {
-                // Stream not ready, save for later
-                console.log("[Room2] Stream not ready, queuing user:", userId);
-                pendingUsersRef.current.push(userId);
-              }
-            }
-          });
-        },
-        onUserJoined: (userId) => {
-          console.log(`[Room2] User ${userId} joined, waiting for their offer`);
-        },
-        onUserLeft: (userId) => {
-          removePeer(userId);
-        },
-        onRtcOffer: (fromId, offer) => {
-          console.log(`[Room2] Received offer from ${fromId}`);
-          if (localStreamRef.current) {
-            handleOffer(fromId, offer, localStreamRef.current);
-          } else {
-            // Stream not ready, queue the offer
-            console.log(
-              "[Room2] Stream not ready, queuing offer from:",
-              fromId
-            );
-            pendingOffersRef.current.push({ fromId, offer });
-          }
-        },
-        onRtcAnswer: (fromId, answer) => {
-          handleAnswer(fromId, answer);
-        },
-        onRtcIceCandidate: (fromId, candidate) => {
-          handleIceCandidate(fromId, candidate);
-        },
-      });
+    if (roomRef.current) {
+      roomRef.current.disconnect();
+      roomRef.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registerHandlers]);
 
-  // Start mic on mount
+    setRemoteParticipants([]);
+  }, []);
+
+  // Connect on mount
   useEffect(() => {
-    let mounted = true;
-
-    const init = async () => {
-      if (mounted) {
-        await startMic();
-      }
-    };
-
-    init();
+    connectToRoom();
 
     return () => {
-      mounted = false;
-      stopMic();
+      disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -585,7 +333,7 @@ export function Room2AudioOnly({
         <div className="permission-icon">🎤</div>
         <h3>Microphone Required</h3>
         <p>{error}</p>
-        <button className="btn-retry" onClick={startMic}>
+        <button className="btn-retry" onClick={connectToRoom}>
           Try Again
         </button>
       </div>
@@ -593,74 +341,93 @@ export function Room2AudioOnly({
   }
 
   // Loading view
-  if (hasPermission === null) {
+  if (hasPermission === null || isConnecting) {
     return (
       <div className="room-loading">
         <div className="loading-spinner" />
-        <p>Requesting microphone access...</p>
+        <p>
+          {isConnecting
+            ? "Connecting to room..."
+            : "Requesting microphone access..."}
+        </p>
       </div>
     );
   }
 
-  const remotePeerIds = Object.keys(remotePeers);
-
   return (
     <div className="room2-content">
-      <div className="audio-participants">
-        {/* Local user */}
-        <div className={`audio-participant ${isSpeaking ? "speaking" : ""}`}>
-          <div className="audio-avatar">
-            <span>🎤</span>
-            <div
-              className="volume-ring"
-              style={{
-                transform: `scale(${1 + volume * 2})`,
-                opacity: isSpeaking ? 0.8 : 0.3,
-              }}
-            />
-          </div>
-          <div className="audio-label">You</div>
-          <div className="audio-status">
-            {isSpeaking ? "Speaking..." : "Listening"}
+      {/* Local audio visualization */}
+      <div className="audio-visualization">
+        <div className={`speaker-indicator ${isSpeaking ? "speaking" : ""}`}>
+          <div className="speaker-icon">🎤</div>
+          <div className="volume-bars">
+            {[...Array(10)].map((_, i) => (
+              <div
+                key={i}
+                className={`volume-bar ${volume > i * 0.1 ? "active" : ""}`}
+              />
+            ))}
           </div>
         </div>
-
-        {/* Remote participants */}
-        {remotePeerIds.map((peerId) => (
-          <div key={peerId} className="audio-participant">
-            <div className="audio-avatar">
-              <span>🔊</span>
-            </div>
-            <div className="audio-label">{peerId.slice(0, 8)}</div>
-            <div className="audio-status">Connected</div>
-          </div>
-        ))}
+        <p className="speaking-status">
+          {isSpeaking ? "Speaking..." : "Listening..."}
+        </p>
       </div>
 
-      {/* <div className="volume-visualizer">
-        <div className="volume-meter-horizontal">
-          <div
-            className="volume-bar-horizontal"
-            style={{
-              width: `${Math.min(volume * 300, 100)}%`,
-              backgroundColor: isSpeaking
-                ? "var(--room2-color)"
-                : "var(--text-muted)",
-            }}
-          />
+      {/* Remote participants */}
+      <div className="remote-speakers">
+        <h4>
+          {remoteParticipants.length > 0
+            ? `${remoteParticipants.length} other${
+                remoteParticipants.length > 1 ? "s" : ""
+              } in room`
+            : "Waiting for others..."}
+        </h4>
+        <div className="speaker-list">
+          {remoteParticipants.map((participant) => (
+            <RemoteParticipantAudio
+              key={participant.identity}
+              participant={participant}
+            />
+          ))}
         </div>
-        <p className="volume-label">Your mic level</p>
-      </div> */}
+      </div>
 
       <div className="room-info">
         <div className="presence-indicator">
           <span className="presence-dot active" />
           <span>
-            {presenceCount} {presenceCount === 1 ? "person" : "people"} in room
+            {1 + remoteParticipants.length}{" "}
+            {1 + remoteParticipants.length === 1 ? "person" : "people"} in room
           </span>
         </div>
-        {/* <p className="room-note">📷 No video. Audio only.</p> */}
       </div>
+    </div>
+  );
+}
+
+// Remote participant audio component
+function RemoteParticipantAudio({ participant }) {
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  useEffect(() => {
+    // Listen for speaking state changes
+    const handleIsSpeakingChanged = (speaking) => {
+      setIsSpeaking(speaking);
+    };
+
+    participant.on("isSpeakingChanged", handleIsSpeakingChanged);
+
+    return () => {
+      participant.off("isSpeakingChanged", handleIsSpeakingChanged);
+    };
+  }, [participant]);
+
+  return (
+    <div className={`remote-speaker ${isSpeaking ? "speaking" : ""}`}>
+      <div className="speaker-avatar">🔊</div>
+      <span className="speaker-id">{participant.identity.slice(0, 8)}</span>
+      {isSpeaking && <span className="speaking-dot" />}
     </div>
   );
 }

@@ -23,8 +23,6 @@ export function RoomView({
   hasInteracted,
   // WebSocket callbacks
   sendWsMessage,
-  sendRtcSignal,
-  registerHandlers,
   incomingMessages,
   clearMessages,
   drawingStrokes,
@@ -69,8 +67,6 @@ export function RoomView({
             participantId={participantId}
             presenceCount={presenceCount}
             onIdleWithOthers={onIdleWithOthers}
-            sendRtcSignal={sendRtcSignal}
-            registerHandlers={registerHandlers}
           />
         )}
 
@@ -81,8 +77,6 @@ export function RoomView({
             onSpeakingEvent={onSpeakingEvent}
             onIdleWithOthers={onIdleWithOthers}
             hasInteracted={hasInteracted}
-            sendRtcSignal={sendRtcSignal}
-            registerHandlers={registerHandlers}
           />
         )}
 
