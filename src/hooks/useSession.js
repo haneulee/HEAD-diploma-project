@@ -1,13 +1,13 @@
 /**
  * Session Management Hook
- * Tracks participant data, room visits, and metrics per room
+ * Tracks participant data, room visits, and behavioral metrics
  * Handles data persistence and export
  */
 
 import { AUTO_SAVE_INTERVAL, DATA_ENDPOINT } from "../config/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const STORAGE_KEY = "research_session_v2";
+const STORAGE_KEY = "research_session_v3";
 
 // Generate anonymous participant ID
 function generateParticipantId() {
@@ -29,18 +29,21 @@ function createInitialSession() {
     currentRoom: null,
 
     // Room visit history
-    roomVisits: [], // [{roomId, enterAt, leaveAt, durationMs}]
+    roomVisits: [],
+    // Each visit: {
+    //   roomId, enterAt, leaveAt, durationMs,
+    //   hasInteracted, firstInteractionDelayMs, exitWithoutInteraction
+    // }
 
     // Per-room metrics
     metrics: {
       room1: {
         totalTimeMs: 0,
-        cameraOnMs: 0,
         visits: 0,
+        // Room 1: No interaction possible (video only, muted)
       },
       room2: {
         totalTimeMs: 0,
-        micOnMs: 0,
         speakingEvents: 0,
         speakingMs: 0,
         visits: 0,
@@ -49,21 +52,21 @@ function createInitialSession() {
         totalTimeMs: 0,
         messagesSent: 0,
         totalMessageLength: 0,
-        lastMessageAt: null,
-        idleTimeMs: 0,
         visits: 0,
       },
       room6: {
         totalTimeMs: 0,
         strokesCount: 0,
-        drawingMs: 0,
         visits: 0,
       },
     },
 
-    // Session summary
+    // Global metrics
     switchesCount: 0,
     totalTimeMs: 0,
+    firstInteractionDelayMs: null, // First interaction across entire session
+    idleTimeWithOthersMs: 0, // Time with others but no interaction
+
     completed: false,
     dataPosted: false,
   };
@@ -87,6 +90,8 @@ export function useSession() {
 
   const currentRoomStartRef = useRef(null);
   const currentVisitIndexRef = useRef(-1);
+  const hasInteractedRef = useRef(false);
+  const firstInteractionTimeRef = useRef(null);
   const autoSaveIntervalRef = useRef(null);
 
   // Save to localStorage
@@ -121,7 +126,10 @@ export function useSession() {
   // Enter a room
   const enterRoom = useCallback((roomId) => {
     const now = new Date().toISOString();
-    currentRoomStartRef.current = Date.now();
+    const nowMs = Date.now();
+    currentRoomStartRef.current = nowMs;
+    hasInteractedRef.current = false;
+    firstInteractionTimeRef.current = null;
 
     setSession((prev) => {
       const isFirstRoom = prev.firstRoom === null;
@@ -137,10 +145,12 @@ export function useSession() {
         const visit = updatedVisits[currentVisitIndexRef.current];
         if (!visit.leaveAt) {
           const enterTime = new Date(visit.enterAt).getTime();
+          const duration = nowMs - enterTime;
           updatedVisits[currentVisitIndexRef.current] = {
             ...visit,
             leaveAt: now,
-            durationMs: Date.now() - enterTime,
+            durationMs: duration,
+            exitWithoutInteraction: !visit.hasInteracted,
           };
         }
       }
@@ -152,6 +162,9 @@ export function useSession() {
         enterAt: now,
         leaveAt: null,
         durationMs: 0,
+        hasInteracted: false,
+        firstInteractionDelayMs: null,
+        exitWithoutInteraction: false,
       });
       currentVisitIndexRef.current = newVisitIndex;
 
@@ -181,6 +194,7 @@ export function useSession() {
   // Leave current room
   const leaveRoom = useCallback(() => {
     const now = new Date().toISOString();
+    const nowMs = Date.now();
 
     setSession((prev) => {
       if (prev.currentRoom === null) return prev;
@@ -193,11 +207,16 @@ export function useSession() {
         const visit = updatedVisits[currentVisitIndexRef.current];
         if (!visit.leaveAt) {
           const enterTime = new Date(visit.enterAt).getTime();
-          const duration = Date.now() - enterTime;
+          const duration = nowMs - enterTime;
           updatedVisits[currentVisitIndexRef.current] = {
             ...visit,
             leaveAt: now,
             durationMs: duration,
+            hasInteracted: hasInteractedRef.current,
+            firstInteractionDelayMs: firstInteractionTimeRef.current
+              ? firstInteractionTimeRef.current - enterTime
+              : null,
+            exitWithoutInteraction: !hasInteractedRef.current,
           };
 
           // Update room total time
@@ -225,59 +244,67 @@ export function useSession() {
     });
 
     currentVisitIndexRef.current = -1;
+    hasInteractedRef.current = false;
+    firstInteractionTimeRef.current = null;
   }, []);
 
-  // Record camera time (Room 1)
-  const recordCameraTime = useCallback((durationMs) => {
-    setSession((prev) => ({
-      ...prev,
-      metrics: {
-        ...prev.metrics,
-        room1: {
-          ...prev.metrics.room1,
-          cameraOnMs: prev.metrics.room1.cameraOnMs + durationMs,
+  // Record first interaction (called by room-specific handlers)
+  const recordFirstInteraction = useCallback(() => {
+    if (!hasInteractedRef.current) {
+      hasInteractedRef.current = true;
+      firstInteractionTimeRef.current = Date.now();
+
+      // Update session's global first interaction delay
+      setSession((prev) => {
+        if (
+          prev.firstInteractionDelayMs === null &&
+          currentRoomStartRef.current
+        ) {
+          const delay = Date.now() - currentRoomStartRef.current;
+          return {
+            ...prev,
+            firstInteractionDelayMs: delay,
+          };
+        }
+        return prev;
+      });
+    }
+  }, []);
+
+  // Record idle time with others (call every second when presenceCount > 1 and not interacted)
+  const recordIdleTimeWithOthers = useCallback((durationMs = 1000) => {
+    if (!hasInteractedRef.current) {
+      setSession((prev) => ({
+        ...prev,
+        idleTimeWithOthersMs: prev.idleTimeWithOthersMs + durationMs,
+      }));
+    }
+  }, []);
+
+  // Record speaking event (Room 2) - marks as interaction
+  const recordSpeakingEvent = useCallback(
+    (durationMs) => {
+      recordFirstInteraction();
+      setSession((prev) => ({
+        ...prev,
+        metrics: {
+          ...prev.metrics,
+          room2: {
+            ...prev.metrics.room2,
+            speakingEvents: prev.metrics.room2.speakingEvents + 1,
+            speakingMs: prev.metrics.room2.speakingMs + durationMs,
+          },
         },
-      },
-    }));
-  }, []);
+      }));
+    },
+    [recordFirstInteraction]
+  );
 
-  // Record mic time (Room 2)
-  const recordMicTime = useCallback((durationMs) => {
-    setSession((prev) => ({
-      ...prev,
-      metrics: {
-        ...prev.metrics,
-        room2: {
-          ...prev.metrics.room2,
-          micOnMs: prev.metrics.room2.micOnMs + durationMs,
-        },
-      },
-    }));
-  }, []);
-
-  // Record speaking event (Room 2)
-  const recordSpeakingEvent = useCallback((durationMs) => {
-    setSession((prev) => ({
-      ...prev,
-      metrics: {
-        ...prev.metrics,
-        room2: {
-          ...prev.metrics.room2,
-          speakingEvents: prev.metrics.room2.speakingEvents + 1,
-          speakingMs: prev.metrics.room2.speakingMs + durationMs,
-        },
-      },
-    }));
-  }, []);
-
-  // Record message sent (Room 4)
-  const recordMessageSent = useCallback((messageLength) => {
-    const now = Date.now();
-    setSession((prev) => {
-      const lastMsg = prev.metrics.room4.lastMessageAt;
-      const idleTime = lastMsg ? now - new Date(lastMsg).getTime() : 0;
-
-      return {
+  // Record message sent (Room 4) - marks as interaction
+  const recordMessageSent = useCallback(
+    (messageLength) => {
+      recordFirstInteraction();
+      setSession((prev) => ({
         ...prev,
         metrics: {
           ...prev.metrics,
@@ -286,16 +313,16 @@ export function useSession() {
             messagesSent: prev.metrics.room4.messagesSent + 1,
             totalMessageLength:
               prev.metrics.room4.totalMessageLength + messageLength,
-            lastMessageAt: new Date().toISOString(),
-            idleTimeMs: prev.metrics.room4.idleTimeMs + idleTime,
           },
         },
-      };
-    });
-  }, []);
+      }));
+    },
+    [recordFirstInteraction]
+  );
 
-  // Record drawing stroke (Room 6)
+  // Record drawing stroke (Room 6) - marks as interaction
   const recordStroke = useCallback(() => {
+    recordFirstInteraction();
     setSession((prev) => ({
       ...prev,
       metrics: {
@@ -306,25 +333,12 @@ export function useSession() {
         },
       },
     }));
-  }, []);
-
-  // Record drawing time (Room 6)
-  const recordDrawingTime = useCallback((durationMs) => {
-    setSession((prev) => ({
-      ...prev,
-      metrics: {
-        ...prev.metrics,
-        room6: {
-          ...prev.metrics.room6,
-          drawingMs: prev.metrics.room6.drawingMs + durationMs,
-        },
-      },
-    }));
-  }, []);
+  }, [recordFirstInteraction]);
 
   // Finish session
   const finishSession = useCallback(async () => {
     const now = new Date().toISOString();
+    const nowMs = Date.now();
 
     setSession((prev) => {
       // Close current visit
@@ -338,11 +352,16 @@ export function useSession() {
         const visit = updatedVisits[currentVisitIndexRef.current];
         if (!visit.leaveAt) {
           const enterTime = new Date(visit.enterAt).getTime();
-          const duration = Date.now() - enterTime;
+          const duration = nowMs - enterTime;
           updatedVisits[currentVisitIndexRef.current] = {
             ...visit,
             leaveAt: now,
             durationMs: duration,
+            hasInteracted: hasInteractedRef.current,
+            firstInteractionDelayMs: firstInteractionTimeRef.current
+              ? firstInteractionTimeRef.current - enterTime
+              : null,
+            exitWithoutInteraction: !hasInteractedRef.current,
           };
 
           // Update room total time
@@ -358,7 +377,7 @@ export function useSession() {
 
       // Calculate total time
       const startTime = new Date(prev.sessionStart).getTime();
-      const totalTimeMs = Date.now() - startTime;
+      const totalTimeMs = nowMs - startTime;
 
       const finalSession = {
         ...prev,
@@ -377,6 +396,8 @@ export function useSession() {
     });
 
     currentVisitIndexRef.current = -1;
+    hasInteractedRef.current = false;
+    firstInteractionTimeRef.current = null;
   }, []);
 
   // Reset session
@@ -384,6 +405,8 @@ export function useSession() {
     const newSession = createInitialSession();
     currentRoomStartRef.current = null;
     currentVisitIndexRef.current = -1;
+    hasInteractedRef.current = false;
+    firstInteractionTimeRef.current = null;
     setSession(newSession);
     localStorage.removeItem(STORAGE_KEY);
   }, []);
@@ -398,30 +421,38 @@ export function useSession() {
 
     const roomSequence = session.roomVisits.map((v) => v.roomId).join(" → ");
 
+    // Count exits without interaction
+    const exitWithoutInteractionCount = session.roomVisits.filter(
+      (v) => v.exitWithoutInteraction
+    ).length;
+
     return {
       participantId: session.participantId,
       firstRoom: session.firstRoom,
       totalTimeMs: session.totalTimeMs,
       switchesCount: session.switchesCount,
 
-      // Room 1
+      // Room times
       timeVideoOnlyMs: m.room1.totalTimeMs,
-      cameraOnMs: m.room1.cameraOnMs,
-
-      // Room 2
       timeAudioOnlyMs: m.room2.totalTimeMs,
-      micOnMs: m.room2.micOnMs,
+      timeMessagesOnlyMs: m.room4.totalTimeMs,
+      timeDrawingMs: m.room6.totalTimeMs,
+
+      // Room 2 metrics
       speakingEvents: m.room2.speakingEvents,
       speakingMs: m.room2.speakingMs,
 
-      // Room 4
-      timeMessagesOnlyMs: m.room4.totalTimeMs,
+      // Room 4 metrics
       messagesSent: m.room4.messagesSent,
       avgMessageLength,
 
-      // Room 6
-      timeDrawingMs: m.room6.totalTimeMs,
+      // Room 6 metrics
       strokesCount: m.room6.strokesCount,
+
+      // Global interaction metrics
+      firstInteractionDelayMs: session.firstInteractionDelayMs,
+      idleTimeWithOthersMs: session.idleTimeWithOthersMs,
+      exitWithoutInteraction: exitWithoutInteractionCount,
 
       roomSequence,
     };
@@ -438,6 +469,8 @@ export function useSession() {
         firstRoom: session.firstRoom,
         switchesCount: session.switchesCount,
         totalTimeMs: session.totalTimeMs,
+        firstInteractionDelayMs: session.firstInteractionDelayMs,
+        idleTimeWithOthersMs: session.idleTimeWithOthersMs,
       },
       roomVisits: session.roomVisits,
       metrics: session.metrics,
@@ -470,13 +503,14 @@ export function useSession() {
       "timeAudioOnlyMs",
       "timeMessagesOnlyMs",
       "timeDrawingMs",
-      "cameraOnMs",
-      "micOnMs",
       "speakingEvents",
       "speakingMs",
       "messagesSent",
       "avgMessageLength",
       "strokesCount",
+      "firstInteractionDelayMs",
+      "idleTimeWithOthersMs",
+      "exitWithoutInteraction",
       "roomSequence",
     ];
 
@@ -489,13 +523,14 @@ export function useSession() {
       stats.timeAudioOnlyMs,
       stats.timeMessagesOnlyMs,
       stats.timeDrawingMs,
-      stats.cameraOnMs,
-      stats.micOnMs,
       stats.speakingEvents,
       stats.speakingMs,
       stats.messagesSent,
       stats.avgMessageLength,
       stats.strokesCount,
+      stats.firstInteractionDelayMs || "",
+      stats.idleTimeWithOthersMs,
+      stats.exitWithoutInteraction,
       `"${stats.roomSequence}"`,
     ];
 
@@ -511,16 +546,20 @@ export function useSession() {
     URL.revokeObjectURL(url);
   }, [session, getStats]);
 
+  // Check if currently interacted (for idle tracking)
+  const hasInteracted = useCallback(() => {
+    return hasInteractedRef.current;
+  }, []);
+
   return {
     session,
     enterRoom,
     leaveRoom,
-    recordCameraTime,
-    recordMicTime,
     recordSpeakingEvent,
     recordMessageSent,
     recordStroke,
-    recordDrawingTime,
+    recordIdleTimeWithOthers,
+    hasInteracted,
     finishSession,
     resetSession,
     getStats,
@@ -531,12 +570,19 @@ export function useSession() {
 
 // Post session data to Google Apps Script endpoint
 async function postSessionData(session, isFinal = false) {
-  // Skip if no endpoint configured
   if (!DATA_ENDPOINT) {
     return;
   }
 
-  const stats = calculateStats(session);
+  const m = session.metrics;
+  const avgMessageLength =
+    m.room4.messagesSent > 0
+      ? Math.round(m.room4.totalMessageLength / m.room4.messagesSent)
+      : 0;
+
+  const exitWithoutInteractionCount = session.roomVisits.filter(
+    (v) => v.exitWithoutInteraction
+  ).length;
 
   const payload = {
     participantId: session.participantId,
@@ -546,18 +592,27 @@ async function postSessionData(session, isFinal = false) {
     totalTimeMs: session.totalTimeMs,
     switchesCount: session.switchesCount,
 
-    // Room metrics
-    timeVideoOnlyMs: session.metrics.room1.totalTimeMs,
-    cameraOnMs: session.metrics.room1.cameraOnMs,
-    timeAudioOnlyMs: session.metrics.room2.totalTimeMs,
-    micOnMs: session.metrics.room2.micOnMs,
-    speakingEvents: session.metrics.room2.speakingEvents,
-    speakingMs: session.metrics.room2.speakingMs,
-    timeMessagesOnlyMs: session.metrics.room4.totalTimeMs,
-    messagesSent: session.metrics.room4.messagesSent,
-    avgMessageLength: stats.avgMessageLength,
-    timeDrawingMs: session.metrics.room6.totalTimeMs,
-    strokesCount: session.metrics.room6.strokesCount,
+    // Room times
+    timeVideoOnlyMs: m.room1.totalTimeMs,
+    timeAudioOnlyMs: m.room2.totalTimeMs,
+    timeMessagesOnlyMs: m.room4.totalTimeMs,
+    timeDrawingMs: m.room6.totalTimeMs,
+
+    // Room 2
+    speakingEvents: m.room2.speakingEvents,
+    speakingMs: m.room2.speakingMs,
+
+    // Room 4
+    messagesSent: m.room4.messagesSent,
+    avgMessageLength,
+
+    // Room 6
+    strokesCount: m.room6.strokesCount,
+
+    // Global interaction metrics
+    firstInteractionDelayMs: session.firstInteractionDelayMs,
+    idleTimeWithOthersMs: session.idleTimeWithOthersMs,
+    exitWithoutInteraction: exitWithoutInteractionCount,
 
     roomSequence: session.roomVisits.map((v) => v.roomId).join(" → "),
     isFinal,
@@ -569,14 +624,11 @@ async function postSessionData(session, isFinal = false) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      mode: "no-cors", // Google Apps Script requires this
+      mode: "no-cors",
     });
-
     console.log("[Session] Data posted to Google Apps Script");
   } catch (err) {
     console.error("[Session] Failed to post data:", err);
-
-    // Retry once on final submission
     if (isFinal) {
       setTimeout(async () => {
         try {
@@ -592,15 +644,4 @@ async function postSessionData(session, isFinal = false) {
       }, 3000);
     }
   }
-}
-
-// Calculate stats helper
-function calculateStats(session) {
-  const m = session.metrics;
-  return {
-    avgMessageLength:
-      m.room4.messagesSent > 0
-        ? Math.round(m.room4.totalMessageLength / m.room4.messagesSent)
-        : 0,
-  };
 }

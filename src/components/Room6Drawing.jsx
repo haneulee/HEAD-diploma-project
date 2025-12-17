@@ -32,7 +32,8 @@ export function Room6Drawing({
   presenceCount,
   drawingStrokes,
   onStroke,
-  onDrawingTime,
+  onIdleWithOthers,
+  hasInteracted,
   sendStroke,
   clearDrawing,
 }) {
@@ -44,8 +45,33 @@ export function Room6Drawing({
   const contextRef = useRef(null);
   const currentStrokeRef = useRef([]);
   const strokeIdRef = useRef(0);
+  const idleTrackingRef = useRef(null);
+  const presenceCountRef = useRef(presenceCount);
+  const hasInteractedRef = useRef(hasInteracted);
 
-  const drawingStartRef = useRef(null);
+  // Keep refs updated
+  useEffect(() => {
+    presenceCountRef.current = presenceCount;
+  }, [presenceCount]);
+
+  useEffect(() => {
+    hasInteractedRef.current = hasInteracted;
+  }, [hasInteracted]);
+
+  // Track idle time with others
+  useEffect(() => {
+    idleTrackingRef.current = setInterval(() => {
+      if (presenceCountRef.current > 1 && !hasInteractedRef.current()) {
+        onIdleWithOthers(1000);
+      }
+    }, 1000);
+
+    return () => {
+      if (idleTrackingRef.current) {
+        clearInterval(idleTrackingRef.current);
+      }
+    };
+  }, [onIdleWithOthers]);
 
   // Redraw canvas from stroke history
   const redrawCanvas = useCallback(() => {
@@ -125,7 +151,6 @@ export function Room6Drawing({
 
       setIsDrawing(true);
       currentStrokeRef.current = [pos];
-      drawingStartRef.current = Date.now();
 
       // Draw first point
       const ctx = contextRef.current;
@@ -168,13 +193,6 @@ export function Room6Drawing({
 
       setIsDrawing(false);
 
-      // Record drawing time
-      if (drawingStartRef.current) {
-        const drawingDuration = Date.now() - drawingStartRef.current;
-        onDrawingTime(drawingDuration);
-        drawingStartRef.current = null;
-      }
-
       // Only save if we have points
       if (currentStrokeRef.current.length > 1) {
         strokeIdRef.current += 1;
@@ -188,7 +206,7 @@ export function Room6Drawing({
           tool,
         };
 
-        // Record stroke
+        // Record stroke (marks as interaction)
         onStroke();
 
         // Send to server
@@ -197,7 +215,7 @@ export function Room6Drawing({
 
       currentStrokeRef.current = [];
     },
-    [isDrawing, participantId, color, tool, onDrawingTime, onStroke, sendStroke]
+    [isDrawing, participantId, color, tool, onStroke, sendStroke]
   );
 
   // Handle clear

@@ -18,12 +18,11 @@ export function RoomView({
   presenceCount,
   participantId,
   // Session callbacks
-  onCameraTime,
-  onMicTime,
   onSpeakingEvent,
   onMessageSent,
   onStroke,
-  onDrawingTime,
+  onIdleWithOthers,
+  hasInteracted,
   // WebSocket callbacks
   sendWsMessage,
   sendRtcSignal,
@@ -69,7 +68,7 @@ export function RoomView({
           <Room1VideoOnly
             participantId={participantId}
             presenceCount={presenceCount}
-            onCameraTime={onCameraTime}
+            onIdleWithOthers={onIdleWithOthers}
             sendRtcSignal={sendRtcSignal}
             registerHandlers={registerHandlers}
           />
@@ -79,8 +78,9 @@ export function RoomView({
           <Room2AudioOnly
             participantId={participantId}
             presenceCount={presenceCount}
-            onMicTime={onMicTime}
             onSpeakingEvent={onSpeakingEvent}
+            onIdleWithOthers={onIdleWithOthers}
+            hasInteracted={hasInteracted}
             sendRtcSignal={sendRtcSignal}
             registerHandlers={registerHandlers}
           />
@@ -91,6 +91,8 @@ export function RoomView({
             participantId={participantId}
             presenceCount={presenceCount}
             onMessageSent={onMessageSent}
+            onIdleWithOthers={onIdleWithOthers}
+            hasInteracted={hasInteracted}
             sendWsMessage={sendWsMessage}
             incomingMessages={incomingMessages}
             clearMessages={clearMessages}
@@ -103,7 +105,8 @@ export function RoomView({
             presenceCount={presenceCount}
             drawingStrokes={drawingStrokes}
             onStroke={onStroke}
-            onDrawingTime={onDrawingTime}
+            onIdleWithOthers={onIdleWithOthers}
+            hasInteracted={hasInteracted}
             sendStroke={sendStroke}
             clearDrawing={clearDrawing}
           />

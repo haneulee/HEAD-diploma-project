@@ -15,6 +15,7 @@ export function FinishView({
 }) {
   // Format duration
   const formatDuration = (ms) => {
+    if (ms === null || ms === undefined) return "—";
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -26,6 +27,7 @@ export function FinishView({
   };
 
   const formatTotalTime = (ms) => {
+    if (!ms) return "—";
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
@@ -116,22 +118,7 @@ export function FinishView({
             </div>
           </div>
 
-          {/* Room 1 Metrics */}
-          <div className="summary-item">
-            <p className="summary-label">Camera On Time</p>
-            <p className="summary-value">
-              {formatDuration(stats.cameraOnMs || 0)}
-            </p>
-          </div>
-
           {/* Room 2 Metrics */}
-          <div className="summary-item">
-            <p className="summary-label">Mic On Time</p>
-            <p className="summary-value">
-              {formatDuration(stats.micOnMs || 0)}
-            </p>
-          </div>
-
           <div className="summary-item">
             <p className="summary-label">Speaking Events</p>
             <p className="summary-value">{stats.speakingEvents || 0}</p>
@@ -161,8 +148,30 @@ export function FinishView({
             <p className="summary-value">{stats.strokesCount || 0}</p>
           </div>
 
+          {/* Interaction Metrics */}
           <div className="summary-item">
-            <p className="summary-label">Path</p>
+            <p className="summary-label">First Interaction Delay</p>
+            <p className="summary-value">
+              {stats.firstInteractionDelayMs !== null
+                ? formatDuration(stats.firstInteractionDelayMs)
+                : "No interaction"}
+            </p>
+          </div>
+
+          <div className="summary-item">
+            <p className="summary-label">Idle Time (with others)</p>
+            <p className="summary-value">
+              {formatDuration(stats.idleTimeWithOthersMs || 0)}
+            </p>
+          </div>
+
+          <div className="summary-item">
+            <p className="summary-label">Exits w/o Interaction</p>
+            <p className="summary-value">{stats.exitWithoutInteraction || 0}</p>
+          </div>
+
+          <div className="summary-item full-width">
+            <p className="summary-label">Room Sequence</p>
             <p className="summary-value mono" style={{ fontSize: "0.8rem" }}>
               {stats.roomSequence || "—"}
             </p>

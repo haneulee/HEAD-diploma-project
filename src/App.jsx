@@ -27,12 +27,11 @@ function App() {
     session,
     enterRoom,
     leaveRoom,
-    recordCameraTime,
-    recordMicTime,
     recordSpeakingEvent,
     recordMessageSent,
     recordStroke,
-    recordDrawingTime,
+    recordIdleTimeWithOthers,
+    hasInteracted,
     finishSession,
     resetSession,
     getStats,
@@ -134,12 +133,11 @@ function App() {
               presenceCount={currentRoomPresence}
               participantId={session.participantId}
               // Session callbacks
-              onCameraTime={recordCameraTime}
-              onMicTime={recordMicTime}
               onSpeakingEvent={recordSpeakingEvent}
               onMessageSent={recordMessageSent}
               onStroke={recordStroke}
-              onDrawingTime={recordDrawingTime}
+              onIdleWithOthers={recordIdleTimeWithOthers}
+              hasInteracted={hasInteracted}
               // WebSocket data & callbacks
               sendWsMessage={wsSendMessage}
               sendRtcSignal={sendRtcSignal}

@@ -121,24 +121,25 @@ function doPost(e) {
 
 ### Session Data (CSV columns)
 
-| Field                | Type   | Description                                    |
-| -------------------- | ------ | ---------------------------------------------- |
-| `participantId`      | string | Auto-generated anonymous ID (e.g., P-ABC12345) |
-| `firstRoom`          | number | First room entered (1, 2, 4, or 6)             |
-| `totalTimeMs`        | number | Total session duration in milliseconds         |
-| `switchesCount`      | number | Number of room changes                         |
-| `timeVideoOnlyMs`    | number | Time spent in Room 1                           |
-| `timeAudioOnlyMs`    | number | Time spent in Room 2                           |
-| `timeMessagesOnlyMs` | number | Time spent in Room 4                           |
-| `timeDrawingMs`      | number | Time spent in Room 6                           |
-| `cameraOnMs`         | number | Camera-on duration (Room 1)                    |
-| `micOnMs`            | number | Mic-on duration (Room 2)                       |
-| `speakingEvents`     | number | Number of speaking occurrences (Room 2)        |
-| `speakingMs`         | number | Total speaking duration (Room 2)               |
-| `messagesSent`       | number | Messages sent (Room 4)                         |
-| `avgMessageLength`   | number | Average message length (Room 4)                |
-| `strokesCount`       | number | Drawing strokes (Room 6)                       |
-| `roomSequence`       | string | Path through rooms (e.g., "1 → 4 → 6 → 2")     |
+| Field                     | Type   | Description                                     |
+| ------------------------- | ------ | ----------------------------------------------- |
+| `participantId`           | string | Auto-generated anonymous ID (e.g., P-ABC12345)  |
+| `firstRoom`               | number | First room entered (1, 2, 4, or 6)              |
+| `totalTimeMs`             | number | Total session duration in milliseconds          |
+| `switchesCount`           | number | Number of room changes                          |
+| `timeVideoOnlyMs`         | number | Time spent in Room 1                            |
+| `timeAudioOnlyMs`         | number | Time spent in Room 2                            |
+| `timeMessagesOnlyMs`      | number | Time spent in Room 4                            |
+| `timeDrawingMs`           | number | Time spent in Room 6                            |
+| `speakingEvents`          | number | Number of speaking occurrences (Room 2)         |
+| `speakingMs`              | number | Total speaking duration (Room 2)                |
+| `messagesSent`            | number | Messages sent (Room 4)                          |
+| `avgMessageLength`        | number | Average message length (Room 4)                 |
+| `strokesCount`            | number | Drawing strokes (Room 6)                        |
+| `firstInteractionDelayMs` | number | Delay from room entry to first interaction (ms) |
+| `idleTimeWithOthersMs`    | number | Time with others but no interaction (ms)        |
+| `exitWithoutInteraction`  | number | Count of room exits without any interaction     |
+| `roomSequence`            | string | Path through rooms (e.g., "1 → 4 → 6 → 2")      |
 
 ## Project Structure
 

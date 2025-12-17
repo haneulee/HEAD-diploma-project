@@ -13,6 +13,8 @@ export function Room4Messages({
   participantId,
   presenceCount,
   onMessageSent,
+  onIdleWithOthers,
+  hasInteracted,
   sendWsMessage,
   incomingMessages,
   clearMessages,
@@ -21,9 +23,36 @@ export function Room4Messages({
   const [input, setInput] = useState("");
   const feedRef = useRef(null);
   const messageIdRef = useRef(0);
+  const idleTrackingRef = useRef(null);
+  const presenceCountRef = useRef(presenceCount);
+  const hasInteractedRef = useRef(hasInteracted);
 
   // Track processed message IDs to avoid duplicates
   const processedIdsRef = useRef(new Set());
+
+  // Keep refs updated
+  useEffect(() => {
+    presenceCountRef.current = presenceCount;
+  }, [presenceCount]);
+
+  useEffect(() => {
+    hasInteractedRef.current = hasInteracted;
+  }, [hasInteracted]);
+
+  // Track idle time with others
+  useEffect(() => {
+    idleTrackingRef.current = setInterval(() => {
+      if (presenceCountRef.current > 1 && !hasInteractedRef.current()) {
+        onIdleWithOthers(1000);
+      }
+    }, 1000);
+
+    return () => {
+      if (idleTrackingRef.current) {
+        clearInterval(idleTrackingRef.current);
+      }
+    };
+  }, [onIdleWithOthers]);
 
   // Merge incoming messages with local messages
   useEffect(() => {

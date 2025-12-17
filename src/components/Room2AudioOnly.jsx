@@ -20,8 +20,9 @@ const RTC_CONFIG = {
 export function Room2AudioOnly({
   participantId,
   presenceCount,
-  onMicTime,
   onSpeakingEvent,
+  onIdleWithOthers,
+  hasInteracted,
   sendRtcSignal,
   registerHandlers,
 }) {
@@ -29,15 +30,13 @@ export function Room2AudioOnly({
   const [error, setError] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volume, setVolume] = useState(0);
-  const [localStream, setLocalStream] = useState(null);
   const [remotePeers, setRemotePeers] = useState({}); // peerId -> { speaking: boolean }
 
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
 
-  const micStartRef = useRef(null);
-  const trackingIntervalRef = useRef(null);
+  const idleTrackingRef = useRef(null);
 
   const speakingStartRef = useRef(null);
   const speechTimeoutRef = useRef(null);
@@ -47,9 +46,20 @@ export function Room2AudioOnly({
   const localStreamRef = useRef(null); // Ref for handlers to access stream
   const pendingUsersRef = useRef([]); // Users to connect when stream is ready
   const pendingOffersRef = useRef([]); // Offers to process when stream is ready
+  const presenceCountRef = useRef(presenceCount);
+  const hasInteractedRef = useRef(hasInteracted);
 
   const onSpeakingEventRef = useRef(onSpeakingEvent);
   onSpeakingEventRef.current = onSpeakingEvent;
+
+  // Keep refs updated
+  useEffect(() => {
+    presenceCountRef.current = presenceCount;
+  }, [presenceCount]);
+
+  useEffect(() => {
+    hasInteractedRef.current = hasInteracted;
+  }, [hasInteracted]);
 
   // Analyze audio for speaking detection
   const startAnalyzing = useCallback(() => {
@@ -291,7 +301,6 @@ export function Room2AudioOnly({
         },
       });
 
-      setLocalStream(stream);
       localStreamRef.current = stream; // Store in ref for handlers
 
       // Connect to any pending users that arrived before stream was ready
@@ -334,16 +343,11 @@ export function Room2AudioOnly({
       startAnalyzing();
 
       setHasPermission(true);
-      micStartRef.current = Date.now();
 
-      // Track mic time every second
-      trackingIntervalRef.current = setInterval(() => {
-        if (micStartRef.current) {
-          const elapsed = Date.now() - micStartRef.current;
-          if (elapsed >= 1000) {
-            onMicTime(1000);
-            micStartRef.current = Date.now();
-          }
+      // Track idle time with others (when not interacted and others present)
+      idleTrackingRef.current = setInterval(() => {
+        if (presenceCountRef.current > 1 && !hasInteractedRef.current()) {
+          onIdleWithOthers(1000);
         }
       }, 1000);
 
@@ -358,20 +362,13 @@ export function Room2AudioOnly({
       );
       return null;
     }
-  }, [onMicTime, startAnalyzing]);
+  }, [startAnalyzing]);
 
   // Stop microphone and cleanup
   const stopMic = useCallback(() => {
     console.log("[Room2] Stopping mic and closing connections");
 
-    if (micStartRef.current) {
-      const elapsed = Date.now() - micStartRef.current;
-      if (elapsed > 0) {
-        onMicTime(elapsed);
-      }
-      micStartRef.current = null;
-    }
-
+    // Record final speaking event if still speaking
     if (speakingStartRef.current) {
       const speakingDuration = Date.now() - speakingStartRef.current;
       if (speakingDuration > 100) {
@@ -380,9 +377,9 @@ export function Room2AudioOnly({
       speakingStartRef.current = null;
     }
 
-    if (trackingIntervalRef.current) {
-      clearInterval(trackingIntervalRef.current);
-      trackingIntervalRef.current = null;
+    if (idleTrackingRef.current) {
+      clearInterval(idleTrackingRef.current);
+      idleTrackingRef.current = null;
     }
     if (speechTimeoutRef.current) {
       clearTimeout(speechTimeoutRef.current);
@@ -425,11 +422,10 @@ export function Room2AudioOnly({
       });
       localStreamRef.current = null;
     }
-    setLocalStream(null);
 
     setIsSpeaking(false);
     setVolume(0);
-  }, [onMicTime, onSpeakingEvent]);
+  }, [onSpeakingEvent]);
 
   // Register handlers immediately on mount (before mic starts)
   useEffect(() => {

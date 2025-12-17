@@ -17,7 +17,7 @@ const RTC_CONFIG = {
 export function Room1VideoOnly({
   participantId,
   presenceCount,
-  onCameraTime,
+  onIdleWithOthers,
   sendRtcSignal,
   registerHandlers,
 }) {
@@ -28,12 +28,17 @@ export function Room1VideoOnly({
   const [remoteStreams, setRemoteStreams] = useState({}); // peerId -> MediaStream
 
   const localVideoRef = useRef(null);
-  const cameraStartRef = useRef(null);
-  const trackingIntervalRef = useRef(null);
+  const idleTrackingRef = useRef(null);
   const peersRef = useRef({}); // peerId -> RTCPeerConnection
   const localStreamRef = useRef(null); // Ref for handlers to access stream
   const pendingUsersRef = useRef([]); // Users to connect when stream is ready
   const pendingOffersRef = useRef([]); // Offers to process when stream is ready
+  const presenceCountRef = useRef(presenceCount);
+
+  // Keep presence count ref updated
+  useEffect(() => {
+    presenceCountRef.current = presenceCount;
+  }, [presenceCount]);
 
   // Request camera permission and start stream
   const startCamera = useCallback(async () => {
@@ -80,16 +85,13 @@ export function Room1VideoOnly({
 
       setHasPermission(true);
       setIsCameraOn(true);
-      cameraStartRef.current = Date.now();
 
-      // Track camera time every second
-      trackingIntervalRef.current = setInterval(() => {
-        if (cameraStartRef.current) {
-          const elapsed = Date.now() - cameraStartRef.current;
-          if (elapsed >= 1000) {
-            onCameraTime(1000);
-            cameraStartRef.current = Date.now();
-          }
+      // Room 1 has NO interaction possible - track idle time with others
+      idleTrackingRef.current = setInterval(() => {
+        // If there are others in the room, track idle time
+        // Room 1 never has interaction, so always count as idle
+        if (presenceCountRef.current > 1) {
+          onIdleWithOthers(1000);
         }
       }, 1000);
 
@@ -275,19 +277,10 @@ export function Room1VideoOnly({
   const stopCamera = useCallback(() => {
     console.log("[Room1] Stopping camera and closing connections");
 
-    // Record final camera time
-    if (cameraStartRef.current) {
-      const elapsed = Date.now() - cameraStartRef.current;
-      if (elapsed > 0) {
-        onCameraTime(elapsed);
-      }
-      cameraStartRef.current = null;
-    }
-
-    // Clear tracking interval
-    if (trackingIntervalRef.current) {
-      clearInterval(trackingIntervalRef.current);
-      trackingIntervalRef.current = null;
+    // Clear idle tracking interval
+    if (idleTrackingRef.current) {
+      clearInterval(idleTrackingRef.current);
+      idleTrackingRef.current = null;
     }
 
     // Close all peer connections
@@ -317,7 +310,7 @@ export function Room1VideoOnly({
     }
 
     setIsCameraOn(false);
-  }, [onCameraTime]);
+  }, []);
 
   // Ensure local video element has the stream
   useEffect(() => {
@@ -399,25 +392,6 @@ export function Room1VideoOnly({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Handle visibility change
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && cameraStartRef.current) {
-        const elapsed = Date.now() - cameraStartRef.current;
-        if (elapsed > 0) {
-          onCameraTime(elapsed);
-        }
-        cameraStartRef.current = null;
-      } else if (!document.hidden && isCameraOn) {
-        cameraStartRef.current = Date.now();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [isCameraOn, onCameraTime]);
 
   // Permission denied view
   if (hasPermission === false) {
