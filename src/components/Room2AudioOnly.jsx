@@ -23,7 +23,6 @@ export function Room2AudioOnly({
   const [hasPermission, setHasPermission] = useState(null);
   const [error, setError] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [volume, setVolume] = useState(0);
   const [remoteParticipants, setRemoteParticipants] = useState([]);
   const [isConnecting, setIsConnecting] = useState(false);
 
@@ -79,8 +78,6 @@ export function Room2AudioOnly({
         sum += dataArray[i];
       }
       const average = sum / dataArray.length / 255;
-      setVolume(average);
-
       const isCurrentlySpeaking = average > VOLUME_THRESHOLD;
 
       if (isCurrentlySpeaking) {
@@ -362,51 +359,40 @@ export function Room2AudioOnly({
     );
   }
 
+  const totalPeople = 1 + remoteParticipants.length;
+
   return (
     <div className="room2-content">
-      {/* Local audio visualization */}
-      <div className="audio-visualization">
-        <div className={`speaker-indicator ${isSpeaking ? "speaking" : ""}`}>
-          <div className="speaker-icon">🎤</div>
-          <div className="volume-bars">
-            {[...Array(10)].map((_, i) => (
-              <div
-                key={i}
-                className={`volume-bar ${volume > i * 0.1 ? "active" : ""}`}
-              />
-            ))}
+      {/* Sound presence visualization */}
+      <div className="sound-presence-container">
+        {/* Your presence (center) */}
+        <div className={`sound-presence you ${isSpeaking ? "speaking" : ""}`}>
+          <div className="presence-waves">
+            <div className="wave wave-1" />
+            <div className="wave wave-2" />
+            <div className="wave wave-3" />
+          </div>
+          <div className="presence-core">
+            <span className="presence-label">You</span>
           </div>
         </div>
-        <p className="speaking-status">
-          {isSpeaking ? "Speaking..." : "Listening..."}
-        </p>
-      </div>
 
-      {/* Remote participants */}
-      <div className="remote-speakers">
-        <h4>
-          {remoteParticipants.length > 0
-            ? `${remoteParticipants.length} other${
-                remoteParticipants.length > 1 ? "s" : ""
-              } in room`
-            : "Waiting for others..."}
-        </h4>
-        <div className="speaker-list">
-          {remoteParticipants.map((participant) => (
-            <RemoteParticipantAudio
-              key={participant.identity}
-              participant={participant}
-            />
-          ))}
-        </div>
+        {/* Other presences (orbiting) */}
+        {remoteParticipants.map((participant, index) => (
+          <RemotePresence
+            key={participant.identity}
+            participant={participant}
+            index={index}
+            total={remoteParticipants.length}
+          />
+        ))}
       </div>
 
       <div className="room-info">
         <div className="presence-indicator">
           <span className="presence-dot active" />
           <span>
-            {1 + remoteParticipants.length}{" "}
-            {1 + remoteParticipants.length === 1 ? "person" : "people"} in room
+            {totalPeople} {totalPeople === 1 ? "person" : "people"} in room
           </span>
         </div>
       </div>
@@ -414,12 +400,31 @@ export function Room2AudioOnly({
   );
 }
 
-// Remote participant audio component
-function RemoteParticipantAudio({ participant }) {
+// Generate random color based on participant identity
+function getColorFromIdentity(identity) {
+  let hash = 0;
+  for (let i = 0; i < identity.length; i++) {
+    hash = identity.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  // Generate hue from hash (0-360)
+  const hue = Math.abs(hash) % 360;
+  const saturation = 70 + (Math.abs(hash >> 8) % 20); // 70-90%
+  const lightness = 60 + (Math.abs(hash >> 16) % 15); // 60-75%
+
+  return {
+    wave: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.5)`,
+    core: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.08)`,
+    glow: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.2)`,
+  };
+}
+
+// Remote presence component - circular sound visualization
+function RemotePresence({ participant, index, total }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const color = getColorFromIdentity(participant.identity);
 
   useEffect(() => {
-    // Listen for speaking state changes
     const handleIsSpeakingChanged = (speaking) => {
       setIsSpeaking(speaking);
     };
@@ -431,11 +436,31 @@ function RemoteParticipantAudio({ participant }) {
     };
   }, [participant]);
 
+  // Calculate position around the center
+  const angle = (index / total) * 360 - 90; // Start from top
+  const radius = 120; // Distance from center
+  const x = Math.cos((angle * Math.PI) / 180) * radius;
+  const y = Math.sin((angle * Math.PI) / 180) * radius;
+
   return (
-    <div className={`remote-speaker ${isSpeaking ? "speaking" : ""}`}>
-      <div className="speaker-avatar">🔊</div>
-      <span className="speaker-id">{participant.identity.slice(0, 8)}</span>
-      {isSpeaking && <span className="speaking-dot" />}
+    <div
+      className={`sound-presence other ${isSpeaking ? "speaking" : ""}`}
+      style={{
+        transform: `translate(${x}px, ${y}px)`,
+        "--presence-wave-color": color.wave,
+        "--presence-core-color": color.core,
+        "--presence-glow-color": color.glow,
+      }}
+    >
+      <div className="presence-waves">
+        <div className="wave wave-1" />
+        <div className="wave wave-2" />
+      </div>
+      <div className="presence-core">
+        <span className="presence-label">
+          {participant.identity.slice(2, 6)}
+        </span>
+      </div>
     </div>
   );
 }

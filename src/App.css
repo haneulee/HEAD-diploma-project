@@ -430,58 +430,177 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-xl);
-  padding-top: var(--space-2xl);
-}
-
-.audio-visualizer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-lg);
-}
-
-.volume-meter {
-  width: 60px;
-  height: 200px;
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
+  justify-content: center;
+  padding: var(--space-xl);
   overflow: hidden;
-  display: flex;
-  align-items: flex-end;
-  border: 2px solid var(--border);
 }
 
-.volume-bar {
-  width: 100%;
-  transition: height 0.1s ease, background-color 0.2s ease;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-}
-
-.mic-status {
+/* Sound presence visualization */
+.sound-presence-container {
+  position: relative;
+  width: 320px;
+  height: 320px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--space-xs);
+  justify-content: center;
 }
 
-.mic-icon {
-  font-size: 2.5rem;
-  transition: transform 0.2s ease;
+.sound-presence {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.mic-status.speaking .mic-icon {
-  transform: scale(1.2);
+.sound-presence.you {
+  z-index: 10;
 }
 
-.mic-label {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
+.sound-presence.other {
+  z-index: 5;
 }
 
-.mic-status.speaking .mic-label {
-  color: var(--room2-color);
-  font-weight: 500;
+.presence-waves {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wave {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  opacity: 0;
+  animation: wave-idle 4s ease-out infinite;
+}
+
+.sound-presence.you .wave {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.sound-presence.you .wave-1 {
+  width: 80px;
+  height: 80px;
+  animation-delay: 0s;
+}
+
+.sound-presence.you .wave-2 {
+  width: 120px;
+  height: 120px;
+  animation-delay: 1s;
+}
+
+.sound-presence.you .wave-3 {
+  width: 160px;
+  height: 160px;
+  animation-delay: 2s;
+}
+
+.sound-presence.other .wave {
+  border-color: var(--presence-wave-color, rgba(76, 175, 80, 0.4));
+}
+
+.sound-presence.other .wave-1 {
+  width: 50px;
+  height: 50px;
+  animation-delay: 0s;
+}
+
+.sound-presence.other .wave-2 {
+  width: 80px;
+  height: 80px;
+  animation-delay: 0.5s;
+}
+
+/* Speaking state - more intense waves */
+.sound-presence.speaking .wave {
+  border-color: rgba(76, 175, 80, 0.6);
+  border-width: 2px;
+  animation: wave-speaking 1.5s ease-out infinite;
+}
+
+.sound-presence.you.speaking .wave {
+  border-color: rgba(76, 175, 80, 0.5);
+}
+
+@keyframes wave-idle {
+  0% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes wave-speaking {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2);
+  }
+}
+
+.presence-core {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(30, 30, 30, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+.sound-presence.you .presence-core {
+  width: 70px;
+  height: 70px;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.sound-presence.speaking .presence-core {
+  border-color: rgba(76, 175, 80, 0.5);
+  box-shadow: 0 0 25px rgba(76, 175, 80, 0.2);
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.sound-presence.other .presence-core {
+  width: 50px;
+  height: 50px;
+  background: var(--presence-core-color, rgba(30, 30, 30, 0.5));
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.sound-presence.other.speaking .presence-core {
+  box-shadow: 0 0 25px var(--presence-glow-color, rgba(76, 175, 80, 0.2));
+  background: var(--presence-core-color, rgba(76, 175, 80, 0.08));
+}
+
+.presence-label {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sound-presence.you .presence-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+}
+
+.sound-presence.speaking .presence-label {
+  color: rgba(76, 175, 80, 0.8);
 }
 
 /* =========================================
