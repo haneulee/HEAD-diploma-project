@@ -389,9 +389,7 @@ export function useSession() {
         completed: true,
       };
 
-      // Post data to endpoint
-      postSessionData(finalSession, true);
-
+      // Don't post data here - wait for feedback submission
       return finalSession;
     });
 
@@ -569,7 +567,7 @@ export function useSession() {
 }
 
 // Post session data to Google Apps Script endpoint
-async function postSessionData(session, isFinal = false) {
+export async function postSessionData(session, feedback = "", isFinal = false) {
   if (!DATA_ENDPOINT) {
     return;
   }
@@ -615,6 +613,7 @@ async function postSessionData(session, isFinal = false) {
     exitWithoutInteraction: exitWithoutInteractionCount,
 
     roomSequence: session.roomVisits.map((v) => v.roomId).join(" → "),
+    feedback: feedback || "",
     isFinal,
     timestamp: new Date().toISOString(),
   };

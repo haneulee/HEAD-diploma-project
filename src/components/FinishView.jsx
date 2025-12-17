@@ -3,7 +3,7 @@
  * Shows feedback form after session completion
  */
 
-import { DATA_ENDPOINT } from "../config/api";
+import { postSessionData } from "../hooks/useSession";
 import { useState } from "react";
 
 export function FinishView({ session, stats, onRestart }) {
@@ -16,30 +16,14 @@ export function FinishView({ session, stats, onRestart }) {
   };
 
   const handleSubmit = async () => {
-    if (!feedback.trim()) return;
-
     setIsSubmitting(true);
 
     try {
-      // Submit feedback along with session data
-      const payload = {
-        participantId: session.participantId,
-        feedback: feedback.trim(),
-        timestamp: new Date().toISOString(),
-      };
-
-      if (DATA_ENDPOINT) {
-        await fetch(DATA_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          mode: "no-cors",
-        });
-      }
-
+      // Submit session data with feedback
+      await postSessionData(session, feedback.trim(), true);
       setIsSubmitted(true);
     } catch (err) {
-      console.error("[FinishView] Failed to submit feedback:", err);
+      console.error("[FinishView] Failed to submit:", err);
       // Still mark as submitted to allow user to continue
       setIsSubmitted(true);
     } finally {
@@ -83,7 +67,7 @@ export function FinishView({ session, stats, onRestart }) {
                 <button
                   className="btn-submit-feedback"
                   onClick={handleSubmit}
-                  disabled={!feedback.trim() || isSubmitting}
+                  disabled={isSubmitting}
                 >
                   {isSubmitting ? "Submitting..." : "Submit"}
                 </button>
