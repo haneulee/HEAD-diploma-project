@@ -287,6 +287,7 @@ export function Room1VideoOnly({
   );
 
   // Connect to a peer (initiator)
+  // Only initiate if our participantId is "less than" peerId (deterministic initiator)
   const connectToPeer = useCallback(
     async (peerId, stream) => {
       // Skip if already connected
@@ -295,6 +296,21 @@ export function Room1VideoOnly({
         return;
       }
 
+      // Determine who should be the initiator (offer sender)
+      // Use participantId comparison to ensure only one side initiates
+      const shouldInitiate = participantId < peerId;
+
+      if (!shouldInitiate) {
+        console.log(
+          `[RTC] ${peerId} should initiate (${participantId} < ${peerId} = false), waiting for their offer`
+        );
+        // Don't create connection yet, wait for their offer
+        return;
+      }
+
+      console.log(
+        `[RTC] We are initiator (${participantId} < ${peerId}), creating offer`
+      );
       const pc = createPeerConnection(peerId, stream);
 
       try {
@@ -313,7 +329,7 @@ export function Room1VideoOnly({
         removePeer(peerId);
       }
     },
-    [createPeerConnection, sendRtcSignal, removePeer]
+    [participantId, createPeerConnection, sendRtcSignal, removePeer]
   );
 
   // Store connectToPeer in ref and process pending users
@@ -338,13 +354,45 @@ export function Room1VideoOnly({
     async (fromId, offer, stream) => {
       console.log(`[RTC] Received offer from ${fromId}`);
 
-      // If connection exists, close it first to allow renegotiation
-      if (peersRef.current[fromId]) {
+      // Check if we should be the initiator instead (race condition check)
+      const shouldWeInitiate = participantId < fromId;
+      if (shouldWeInitiate) {
         console.log(
-          `[RTC] Closing existing connection to ${fromId} for renegotiation`
+          `[RTC] We should be initiator (${participantId} < ${fromId}), but received offer. Ignoring and waiting for our offer to be processed.`
         );
-        peersRef.current[fromId].close();
-        delete peersRef.current[fromId];
+        // If we already have a connection, don't process this offer
+        if (peersRef.current[fromId]) {
+          const pc = peersRef.current[fromId];
+          if (pc.signalingState === "have-local-offer") {
+            console.log(
+              `[RTC] Already sent offer to ${fromId}, ignoring their offer`
+            );
+            return;
+          }
+        }
+      }
+
+      // If connection exists, check its state
+      if (peersRef.current[fromId]) {
+        const pc = peersRef.current[fromId];
+        const signalingState = pc.signalingState;
+
+        // If we already have a local offer, we're the initiator - ignore this offer
+        if (signalingState === "have-local-offer") {
+          console.log(
+            `[RTC] Already sent offer to ${fromId}, ignoring their offer`
+          );
+          return;
+        }
+
+        // If connection is stable, close it for renegotiation
+        if (signalingState === "stable") {
+          console.log(
+            `[RTC] Closing existing stable connection to ${fromId} for renegotiation`
+          );
+          pc.close();
+          delete peersRef.current[fromId];
+        }
       }
 
       const pc = createPeerConnection(fromId, stream);
@@ -363,10 +411,23 @@ export function Room1VideoOnly({
         console.log(`[RTC] Sent answer to ${fromId}`);
       } catch (err) {
         console.error(`[RTC] Error handling offer:`, err);
+        // If error is because we're in wrong state, just ignore
+        if (err.name === "InvalidStateError") {
+          const currentState = pc.signalingState;
+          if (
+            currentState === "have-local-offer" ||
+            currentState === "stable"
+          ) {
+            console.log(
+              `[RTC] Ignoring offer from ${fromId} - wrong state: ${currentState}`
+            );
+            return;
+          }
+        }
         removePeer(fromId);
       }
     },
-    [createPeerConnection, sendRtcSignal, removePeer]
+    [participantId, createPeerConnection, sendRtcSignal, removePeer]
   );
 
   // Store handleOffer in ref and process pending offers
@@ -392,15 +453,51 @@ export function Room1VideoOnly({
       console.log(`[RTC] Received answer from ${fromId}`);
       const pc = peersRef.current[fromId];
       if (pc) {
+        const signalingState = pc.signalingState;
+        console.log(
+          `[RTC] Current signaling state for ${fromId}: ${signalingState}`
+        );
+
+        // If we already have a local answer or are in stable state, ignore this answer
+        // This happens when both peers send offers simultaneously
+        if (
+          signalingState === "have-local-answer" ||
+          signalingState === "stable"
+        ) {
+          console.log(
+            `[RTC] Ignoring answer from ${fromId} - already have answer (state: ${signalingState})`
+          );
+          return;
+        }
+
+        // Only accept answer if we're in "have-local-offer" state
+        if (signalingState !== "have-local-offer") {
+          console.log(
+            `[RTC] Ignoring answer from ${fromId} - wrong state: ${signalingState}`
+          );
+          return;
+        }
+
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          console.log(`[RTC] Successfully set remote answer from ${fromId}`);
         } catch (err) {
           console.error(`[RTC] Error handling answer:`, err);
-          // Only remove if it's a critical error
+          // Only remove if it's a critical error that can't be recovered
           if (
             err.name === "InvalidStateError" ||
             err.name === "OperationError"
           ) {
+            // Check if it's because we're in wrong state (race condition)
+            if (
+              pc.signalingState === "stable" ||
+              pc.signalingState === "have-local-answer"
+            ) {
+              console.log(
+                `[RTC] Answer received in wrong state (${pc.signalingState}), ignoring`
+              );
+              return;
+            }
             removePeer(fromId);
           }
         }
@@ -499,14 +596,17 @@ export function Room1VideoOnly({
         },
         onUserJoined: (userId) => {
           // New user joined - proactively connect if we have stream ready
+          // But only if we should be the initiator
           console.log(`[Room1] User ${userId} joined`);
           if (localStreamRef.current) {
-            // Stream ready, connect now
+            // Stream ready, connect now (connectToPeer will check if we should initiate)
             connectToPeer(userId, localStreamRef.current);
           } else {
             // Stream not ready, save for later
             console.log(`[Room1] Stream not ready, queuing user:`, userId);
-            pendingUsersRef.current.push(userId);
+            if (!pendingUsersRef.current.includes(userId)) {
+              pendingUsersRef.current.push(userId);
+            }
           }
         },
         onUserLeft: (userId) => {
