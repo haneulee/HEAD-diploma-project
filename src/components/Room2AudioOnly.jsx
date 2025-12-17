@@ -198,9 +198,11 @@ export function Room2AudioOnly({
           `[LiveKit] Track subscribed: ${track.kind} from ${participant.identity}`
         );
 
-        // Auto-play audio tracks
+        // Auto-play audio tracks with volume control to reduce echo feedback
         if (track.kind === Track.Kind.Audio) {
           const audioElement = track.attach();
+          // Reduce volume slightly to minimize echo pickup
+          audioElement.volume = 0.8;
           audioElement.play().catch(console.error);
         }
 
