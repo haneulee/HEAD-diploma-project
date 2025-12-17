@@ -29,6 +29,7 @@ export function Room1VideoOnly({
 
   const roomRef = useRef(null);
   const localVideoRef = useRef(null);
+  const localVideoTrackRef = useRef(null); // Keep track ref for callback
   const idleTrackingRef = useRef(null);
   const presenceCountRef = useRef(presenceCount);
 
@@ -63,12 +64,8 @@ export function Room1VideoOnly({
       });
 
       setLocalVideoTrack(videoTrack);
+      localVideoTrackRef.current = videoTrack; // Store in ref for callback
       setHasPermission(true);
-
-      // Attach to local video element
-      if (localVideoRef.current) {
-        videoTrack.attach(localVideoRef.current);
-      }
 
       // Get token from server
       const tokenResponse = await fetch(
@@ -199,10 +196,19 @@ export function Room1VideoOnly({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Attach local video when track changes or permission granted
+  // Callback ref to attach video when element mounts
+  const setLocalVideoRef = useCallback((element) => {
+    localVideoRef.current = element;
+    if (element && localVideoTrackRef.current) {
+      console.log("[LiveKit] Attaching local video track via ref callback");
+      localVideoTrackRef.current.attach(element);
+    }
+  }, []);
+
+  // Also attach when track changes (in case element already mounted)
   useEffect(() => {
     if (localVideoRef.current && localVideoTrack && hasPermission) {
-      console.log("[LiveKit] Attaching local video track");
+      console.log("[LiveKit] Attaching local video track via effect");
       localVideoTrack.attach(localVideoRef.current);
     }
   }, [localVideoTrack, hasPermission]);
@@ -243,7 +249,7 @@ export function Room1VideoOnly({
         {/* Local video */}
         <div className="video-container local">
           <video
-            ref={localVideoRef}
+            ref={setLocalVideoRef}
             autoPlay
             playsInline
             muted
