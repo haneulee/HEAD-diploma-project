@@ -20,6 +20,8 @@ export function useWebSocket(participantId) {
     6: 0,
   });
   const [roomUsers, setRoomUsers] = useState([]);
+  // Chat history (Room 3) should persist across room switches during the session.
+  // This is in-memory only (cleared when participantId changes / session resets).
   const [incomingMessages, setIncomingMessages] = useState([]);
   const [drawingStrokes, setDrawingStrokes] = useState([]);
 
@@ -234,7 +236,6 @@ export function useWebSocket(participantId) {
     currentRoomRef.current = roomId;
 
     if (isChangingRoom) {
-      setIncomingMessages([]);
       setDrawingStrokes([]);
       setRoomUsers([]);
     }
@@ -255,7 +256,6 @@ export function useWebSocket(participantId) {
   const leaveRoom = useCallback(() => {
     currentRoomRef.current = null;
     setRoomUsers([]);
-    setIncomingMessages([]);
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "leave" }));
@@ -265,6 +265,17 @@ export function useWebSocket(participantId) {
   // Send a text message (Room 3) - now includes text content
   const sendMessage = useCallback((messageId, text) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Local echo (so history is preserved even if component unmounts)
+      setIncomingMessages((prev) => [
+        ...prev,
+        {
+          id: messageId,
+          text,
+          sender: participantIdRef.current,
+          isYou: true,
+          timestamp: Date.now(),
+        },
+      ]);
       wsRef.current.send(
         JSON.stringify({
           type: "message",

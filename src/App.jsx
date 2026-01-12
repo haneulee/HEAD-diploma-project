@@ -35,8 +35,6 @@ function App() {
     finishSession,
     resetSession,
     getStats,
-    exportJSON,
-    exportCSV,
   } = useSession();
 
   // WebSocket connection
@@ -103,8 +101,10 @@ function App() {
   // Handle restarting
   const handleRestart = useCallback(() => {
     resetSession();
+    wsClearMessages();
+    wsClearDrawing();
     setCurrentView(VIEW.LOBBY);
-  }, [resetSession]);
+  }, [resetSession, wsClearMessages, wsClearDrawing]);
 
   // Get presence count for current room (server already includes self)
   const currentRoomPresence =
@@ -139,7 +139,6 @@ function App() {
               // WebSocket data & callbacks
               sendWsMessage={wsSendMessage}
               incomingMessages={incomingMessages}
-              clearMessages={wsClearMessages}
               drawingStrokes={drawingStrokes}
               sendStroke={wsSendStroke}
               clearDrawing={wsClearDrawing}

@@ -24,7 +24,6 @@ export function RoomView({
   // WebSocket callbacks
   sendWsMessage,
   incomingMessages,
-  clearMessages,
   drawingStrokes,
   sendStroke,
   clearDrawing,
@@ -89,7 +88,6 @@ export function RoomView({
             hasInteracted={hasInteracted}
             sendWsMessage={sendWsMessage}
             incomingMessages={incomingMessages}
-            clearMessages={clearMessages}
           />
         )}
 

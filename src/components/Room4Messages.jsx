@@ -17,18 +17,14 @@ export function Room4Messages({
   hasInteracted,
   sendWsMessage,
   incomingMessages,
-  clearMessages,
 }) {
-  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const feedRef = useRef(null);
   const messageIdRef = useRef(0);
   const idleTrackingRef = useRef(null);
   const presenceCountRef = useRef(presenceCount);
   const hasInteractedRef = useRef(hasInteracted);
-
-  // Track processed message IDs to avoid duplicates
-  const processedIdsRef = useRef(new Set());
+  const messages = incomingMessages || [];
 
   // Keep refs updated
   useEffect(() => {
@@ -54,35 +50,12 @@ export function Room4Messages({
     };
   }, [onIdleWithOthers]);
 
-  // Merge incoming messages with local messages
-  useEffect(() => {
-    if (incomingMessages && incomingMessages.length > 0) {
-      const newMessages = incomingMessages.filter(
-        (m) => !processedIdsRef.current.has(m.id)
-      );
-
-      if (newMessages.length > 0) {
-        newMessages.forEach((m) => processedIdsRef.current.add(m.id));
-        setMessages((prev) => [...prev, ...newMessages]);
-      }
-    }
-  }, [incomingMessages]);
-
   // Scroll to bottom on new message
   useEffect(() => {
     if (feedRef.current) {
       feedRef.current.scrollTop = feedRef.current.scrollHeight;
     }
-  }, [messages]);
-
-  // Clear messages on unmount
-  useEffect(() => {
-    return () => {
-      if (clearMessages) {
-        clearMessages();
-      }
-    };
-  }, [clearMessages]);
+  }, [incomingMessages]);
 
   // Handle input change
   const handleInputChange = (e) => {
@@ -96,16 +69,6 @@ export function Room4Messages({
 
     messageIdRef.current += 1;
     const messageId = `${participantId}-${messageIdRef.current}`;
-
-    // Add to local messages immediately
-    const newMessage = {
-      id: messageId,
-      text,
-      sender: participantId,
-      isYou: true,
-      timestamp: Date.now(),
-    };
-    setMessages((prev) => [...prev, newMessage]);
 
     // Record the message (length only for analytics)
     onMessageSent(text.length);
