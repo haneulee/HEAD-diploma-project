@@ -13,7 +13,20 @@ import soundtouchWorkletUrl from "@soundtouchjs/audio-worklet?url";
 
 const VOLUME_THRESHOLD = 0.02;
 const SPEECH_DEBOUNCE_MS = 200;
-const DEFAULT_PITCH_SEMITONES = 12; // +12 = 1 octave up (chipmunk)
+const PITCH_MIN_SEMITONES = -24;
+const PITCH_MAX_SEMITONES = 36;
+
+function pitchFromParticipantId(id) {
+  // Deterministic "random" pitch per participant
+  // Maps to [PITCH_MIN_SEMITONES, PITCH_MAX_SEMITONES]
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  }
+  const range = PITCH_MAX_SEMITONES - PITCH_MIN_SEMITONES;
+  const n = Math.abs(hash) % (range + 1);
+  return PITCH_MIN_SEMITONES + n;
+}
 
 export function Room2AudioOnly({
   participantId,
@@ -191,7 +204,8 @@ export function Room2AudioOnly({
         );
         soundtouchNodeRef.current = stNode;
         // Always-on voice change: force pitch shift
-        stNode.parameters.get("pitchSemitones").value = DEFAULT_PITCH_SEMITONES;
+        stNode.parameters.get("pitchSemitones").value =
+          pitchFromParticipantId(participantId);
 
         // Connect mic -> pitch shifter -> destination (no local playback to avoid echo)
         const dest = audioContextRef.current.createMediaStreamDestination();
