@@ -16,12 +16,14 @@ export function useWebSocket(participantId) {
   const [presenceCounts, setPresenceCounts] = useState({
     1: 0,
     2: 0,
+    3: 0,
     4: 0,
-    6: 0,
+    5: 0,
   });
   const [roomUsers, setRoomUsers] = useState([]);
   const [incomingMessages, setIncomingMessages] = useState([]);
   const [drawingStrokes, setDrawingStrokes] = useState([]);
+  const [cursorStates, setCursorStates] = useState({});
 
   const wsRef = useRef(null);
   const currentRoomRef = useRef(null);
@@ -71,6 +73,13 @@ export function useWebSocket(participantId) {
           }
           return prev;
         });
+        // Also clear any cursor presence for that user (Room 5)
+        setCursorStates((prev) => {
+          if (!prev[data.participantId]) return prev;
+          const next = { ...prev };
+          delete next[data.participantId];
+          return next;
+        });
         // Notify RTC handler about user leaving with a small delay
         // to avoid premature removal during WebRTC setup
         if (handlersRef.current.onUserLeft) {
@@ -80,6 +89,19 @@ export function useWebSocket(participantId) {
             }
           }, 100);
         }
+        break;
+
+      case "cursor":
+        setCursorStates((prev) => ({
+          ...prev,
+          [data.participantId]: {
+            x: data.x,
+            y: data.y,
+            active: data.active !== false,
+            pointerType: data.pointerType || "unknown",
+            timestamp: data.timestamp || Date.now(),
+          },
+        }));
         break;
 
       // WebRTC signaling
@@ -243,6 +265,8 @@ export function useWebSocket(participantId) {
     if (isChangingRoom) {
       setDrawingStrokes([]);
       setRoomUsers([]);
+      // Cursor states are only used in Move room; reset on room switch
+      setCursorStates({});
     }
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -261,6 +285,7 @@ export function useWebSocket(participantId) {
   const leaveRoom = useCallback(() => {
     currentRoomRef.current = null;
     setRoomUsers([]);
+    setCursorStates({});
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "leave" }));
@@ -328,6 +353,18 @@ export function useWebSocket(participantId) {
     }
   }, []);
 
+  // Send cursor / touch position (Room 5)
+  const sendCursor = useCallback((payload) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "cursor",
+          ...payload,
+        })
+      );
+    }
+  }, []);
+
   // Clear drawing (Room 4)
   const clearDrawing = useCallback(() => {
     setDrawingStrokes([]);
@@ -361,11 +398,13 @@ export function useWebSocket(participantId) {
     roomUsers,
     incomingMessages,
     drawingStrokes,
+    cursorStates,
     joinRoom,
     leaveRoom,
     sendMessage,
     sendRtcSignal,
     sendStroke,
+    sendCursor,
     clearDrawing,
     clearMessages,
     registerHandlers,

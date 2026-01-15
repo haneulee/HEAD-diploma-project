@@ -43,10 +43,12 @@ function App() {
     presenceCounts,
     incomingMessages,
     drawingStrokes,
+    cursorStates,
     joinRoom: wsJoinRoom,
     leaveRoom: wsLeaveRoom,
     sendMessage: wsSendMessage,
     sendStroke: wsSendStroke,
+    sendCursor: wsSendCursor,
     clearDrawing: wsClearDrawing,
     clearMessages: wsClearMessages,
     getPresenceCount,
@@ -139,6 +141,8 @@ function App() {
               // WebSocket data & callbacks
               sendWsMessage={wsSendMessage}
               incomingMessages={incomingMessages}
+              cursorStates={cursorStates}
+              sendCursor={wsSendCursor}
               drawingStrokes={drawingStrokes}
               sendStroke={wsSendStroke}
               clearDrawing={wsClearDrawing}

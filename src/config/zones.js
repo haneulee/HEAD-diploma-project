@@ -45,6 +45,18 @@ export const ROOMS = {
     color: "room4",
     icon: "🖌️",
   },
+  5: {
+    id: 5,
+    name: "Move",
+    shortDesc: "Ambient co-presence via motion.",
+    description:
+      "See subtle traces of others' cursor / touch positions in real time.",
+    rules:
+      "No names, no prompts. Just a gentle sense that others are here, moving.",
+    permission: null,
+    color: "room5",
+    icon: "👋",
+  },
 };
 
 // Get room by ID

@@ -7,7 +7,7 @@
 import { AUTO_SAVE_INTERVAL, DATA_ENDPOINT } from "../config/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const STORAGE_KEY = "research_session_v4"; // v4: Room IDs changed to 1,2,3,4
+const STORAGE_KEY = "research_session_v4"; // Note: we may add new rooms over time
 
 // Generate anonymous participant ID
 function generateParticipantId() {
@@ -59,6 +59,11 @@ function createInitialSession() {
         strokesCount: 0,
         visits: 0,
       },
+      room5: {
+        totalTimeMs: 0,
+        visits: 0,
+        // Room 5: Move (ambient co-presence)
+      },
     },
 
     // Global metrics
@@ -72,6 +77,25 @@ function createInitialSession() {
   };
 }
 
+function normalizeSession(parsed) {
+  const defaults = createInitialSession();
+  const metrics = parsed?.metrics || {};
+
+  return {
+    ...defaults,
+    ...parsed,
+    metrics: {
+      ...defaults.metrics,
+      ...metrics,
+      room1: { ...defaults.metrics.room1, ...(metrics.room1 || {}) },
+      room2: { ...defaults.metrics.room2, ...(metrics.room2 || {}) },
+      room3: { ...defaults.metrics.room3, ...(metrics.room3 || {}) },
+      room4: { ...defaults.metrics.room4, ...(metrics.room4 || {}) },
+      room5: { ...defaults.metrics.room5, ...(metrics.room5 || {}) },
+    },
+  };
+}
+
 export function useSession() {
   const [session, setSession] = useState(() => {
     try {
@@ -79,7 +103,7 @@ export function useSession() {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (!parsed.completed) {
-          return parsed;
+          return normalizeSession(parsed);
         }
       }
     } catch (e) {
@@ -435,6 +459,7 @@ export function useSession() {
       timeAudioOnlyMs: m.room2.totalTimeMs,
       timeMessagesOnlyMs: m.room3.totalTimeMs,
       timeDrawingMs: m.room4.totalTimeMs,
+      timeMoveMs: m.room5?.totalTimeMs || 0,
 
       // Room 2 metrics
       speakingEvents: m.room2.speakingEvents,
@@ -501,6 +526,7 @@ export function useSession() {
       "timeAudioOnlyMs",
       "timeMessagesOnlyMs",
       "timeDrawingMs",
+      "timeMoveMs",
       "speakingEvents",
       "speakingMs",
       "messagesSent",
@@ -521,6 +547,7 @@ export function useSession() {
       stats.timeAudioOnlyMs,
       stats.timeMessagesOnlyMs,
       stats.timeDrawingMs,
+      stats.timeMoveMs,
       stats.speakingEvents,
       stats.speakingMs,
       stats.messagesSent,
@@ -595,6 +622,7 @@ export async function postSessionData(session, feedback = "", isFinal = false) {
     timeAudioOnlyMs: m.room2.totalTimeMs,
     timeMessagesOnlyMs: m.room3.totalTimeMs,
     timeDrawingMs: m.room4.totalTimeMs,
+    timeMoveMs: m.room5?.totalTimeMs || 0,
 
     // Room 2
     speakingEvents: m.room2.speakingEvents,

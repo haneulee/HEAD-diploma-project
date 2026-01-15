@@ -121,6 +121,9 @@
 .room-card[data-room="4"]::before {
   background: var(--room4-color);
 }
+.room-card[data-room="5"]::before {
+  background: var(--accent);
+}
 
 .room-card:hover {
   border-color: var(--border-light);
@@ -139,6 +142,9 @@
 }
 .room-card[data-room="4"]:hover {
   background: var(--room4-bg);
+}
+.room-card[data-room="5"]:hover {
+  background: var(--bg-elevated);
 }
 
 .room-card-header {
@@ -186,6 +192,9 @@
 }
 .room-card[data-room="4"] h3 {
   color: var(--room4-color);
+}
+.room-card[data-room="5"] h3 {
+  color: var(--text-primary);
 }
 
 .room-card-desc {
@@ -880,6 +889,75 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+}
+
+/* =========================================
+   Room 5 - Move (ambient co-presence)
+   ========================================= */
+
+.move-room {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.move-stage {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: radial-gradient(
+      circle at 30% 20%,
+      rgba(255, 255, 255, 0.05),
+      transparent 45%
+    ),
+    radial-gradient(
+      circle at 70% 60%,
+      rgba(255, 255, 255, 0.035),
+      transparent 50%
+    ),
+    var(--bg-card);
+  overflow: hidden;
+}
+
+.move-hit {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.move-marker {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  filter: blur(0.2px);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.08);
+  transition: opacity 0.9s ease, transform 0.12s ease;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.move-marker.active {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.move-marker.fade {
+  transform: translate(-50%, -50%) scale(0.98);
+}
+
+.move-marker.self {
+  mix-blend-mode: normal;
+  box-shadow: none;
+}
+
+.move-note {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
 }
 
 .drawing-toolbar {

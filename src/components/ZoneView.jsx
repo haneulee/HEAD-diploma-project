@@ -7,6 +7,7 @@ import { ROOMS } from "../config/zones";
 import { Room1VideoOnly } from "./Room1VideoOnly";
 import { Room2AudioOnly } from "./Room2AudioOnly";
 import { Room4Messages } from "./Room4Messages";
+import { Room5Move } from "./Room5Move";
 import { Room6Drawing } from "./Room6Drawing";
 
 export function RoomView({
@@ -24,6 +25,8 @@ export function RoomView({
   // WebSocket callbacks
   sendWsMessage,
   incomingMessages,
+  cursorStates,
+  sendCursor,
   drawingStrokes,
   sendStroke,
   clearDrawing,
@@ -101,6 +104,14 @@ export function RoomView({
             hasInteracted={hasInteracted}
             sendStroke={sendStroke}
             clearDrawing={clearDrawing}
+          />
+        )}
+
+        {roomId === 5 && (
+          <Room5Move
+            participantId={participantId}
+            cursorStates={cursorStates}
+            sendCursor={sendCursor}
           />
         )}
       </div>

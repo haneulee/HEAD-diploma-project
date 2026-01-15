@@ -102,6 +102,7 @@ const rooms = {
   2: new Map(),
   3: new Map(),
   4: new Map(),
+  5: new Map(),
 };
 
 // Drawing history for Room 4 (keep last N strokes for new joiners)
@@ -115,6 +116,7 @@ function getRoomCounts() {
     2: rooms[2].size,
     3: rooms[3].size,
     4: rooms[4].size,
+    5: rooms[5].size,
   };
 }
 
@@ -326,9 +328,7 @@ wss.on("connection", (ws) => {
               },
               ws // Exclude sender (they already have it locally)
             );
-            console.log(
-              `[MSG] ${participantId}: ${kind}`
-            );
+            console.log(`[MSG] ${participantId}: ${kind}`);
           }
           break;
         }
@@ -364,6 +364,32 @@ wss.on("connection", (ws) => {
                 stroke,
               },
               null // Include sender so their strokes are in drawingStrokes
+            );
+          }
+          break;
+        }
+
+        // ==================== Room 5: Move (co-presence) ====================
+
+        case "cursor": {
+          // Room 5: Cursor / touch presence
+          if (currentRoom === 5 && participantId) {
+            const x = typeof message.x === "number" ? message.x : null;
+            const y = typeof message.y === "number" ? message.y : null;
+            if (x === null || y === null) break;
+
+            broadcastToRoom(
+              5,
+              {
+                type: "cursor",
+                participantId,
+                x,
+                y,
+                active: message.active !== false, // default true
+                pointerType: message.pointerType || "unknown",
+                timestamp: Date.now(),
+              },
+              null // include sender is fine; clients can render everyone
             );
           }
           break;
