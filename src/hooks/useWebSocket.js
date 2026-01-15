@@ -20,8 +20,6 @@ export function useWebSocket(participantId) {
     6: 0,
   });
   const [roomUsers, setRoomUsers] = useState([]);
-  // Chat history (Room 3) should persist across room switches during the session.
-  // This is in-memory only (cleared when participantId changes / session resets).
   const [incomingMessages, setIncomingMessages] = useState([]);
   const [drawingStrokes, setDrawingStrokes] = useState([]);
 
@@ -32,6 +30,7 @@ export function useWebSocket(participantId) {
   const handlersRef = useRef({});
   const participantIdRef = useRef(participantId);
   const connectRef = useRef(null);
+  const processedMessageIdsRef = useRef(new Set());
 
   // Keep participantId ref updated via effect
   useEffect(() => {
@@ -104,16 +103,22 @@ export function useWebSocket(participantId) {
 
       // Room 3: Text messages with content
       case "message":
-        setIncomingMessages((prev) => [
-          ...prev,
-          {
-            id: data.messageId,
-            text: data.text,
-            sender: data.participantId,
-            isYou: false,
-            timestamp: data.timestamp,
-          },
-        ]);
+        setIncomingMessages((prev) => {
+          if (processedMessageIdsRef.current.has(data.messageId)) return prev;
+          processedMessageIdsRef.current.add(data.messageId);
+          return [
+            ...prev,
+            {
+              id: data.messageId,
+              kind: data.kind || "text",
+              text: data.text,
+              iconId: data.iconId || null,
+              sender: data.participantId,
+              isYou: false,
+              timestamp: data.timestamp,
+            },
+          ];
+        });
         break;
 
       case "draw_stroke":
@@ -263,27 +268,45 @@ export function useWebSocket(participantId) {
   }, []);
 
   // Send a text message (Room 3) - now includes text content
-  const sendMessage = useCallback((messageId, text) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // Local echo (so history is preserved even if component unmounts)
-      setIncomingMessages((prev) => [
+  const sendMessage = useCallback((messageId, payload) => {
+    const isText = typeof payload === "string";
+    const kind = isText ? "text" : payload?.kind || "text";
+    const text = isText ? payload : payload?.text || "";
+    const iconId = !isText ? payload?.iconId || null : null;
+    const timestamp = Date.now();
+
+    // Local echo so the sender also sees the message (server excludes sender)
+    setIncomingMessages((prev) => {
+      if (processedMessageIdsRef.current.has(messageId)) return prev;
+      processedMessageIdsRef.current.add(messageId);
+      return [
         ...prev,
         {
           id: messageId,
+          kind,
           text,
+          iconId,
           sender: participantIdRef.current,
           isYou: true,
-          timestamp: Date.now(),
+          timestamp,
         },
-      ]);
-      wsRef.current.send(
-        JSON.stringify({
-          type: "message",
-          messageId,
-          text,
-        })
-      );
+      ];
+    });
+
+    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+      console.warn("[WS] Cannot send message: socket not open");
+      return;
     }
+
+    wsRef.current.send(
+      JSON.stringify({
+        type: "message",
+        messageId,
+        text,
+        kind,
+        iconId,
+      })
+    );
   }, []);
 
   // Send WebRTC signaling message
@@ -321,6 +344,7 @@ export function useWebSocket(participantId) {
   // Clear incoming messages
   const clearMessages = useCallback(() => {
     setIncomingMessages([]);
+    processedMessageIdsRef.current = new Set();
   }, []);
 
   // Get presence count for a specific room

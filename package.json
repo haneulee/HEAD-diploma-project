@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@iconify/react": "^6.0.2",
     "livekit-client": "^2.16.1",
     "livekit-server-sdk": "^2.15.0",
     "react": "^19.2.0",

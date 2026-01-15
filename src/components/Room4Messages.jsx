@@ -5,9 +5,13 @@
  * Messages are shared in real-time but NOT stored
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { Icon } from "@iconify/react";
+import { loadIcon } from "@iconify/react";
 
 const MAX_MESSAGE_LENGTH = 200;
+const ICONIFY_SEARCH_LIMIT = 48;
 
 export function Room4Messages({
   participantId,
@@ -19,12 +23,17 @@ export function Room4Messages({
   incomingMessages,
 }) {
   const [input, setInput] = useState("");
+  const [isIconOpen, setIsIconOpen] = useState(false);
+  const [iconQuery, setIconQuery] = useState("");
+  const [iconResults, setIconResults] = useState([]);
+  const [iconStatus, setIconStatus] = useState("idle"); // idle | loading | error
+  const [iconError, setIconError] = useState("");
   const feedRef = useRef(null);
-  const messageIdRef = useRef(0);
+  const messageSeqRef = useRef(0);
   const idleTrackingRef = useRef(null);
   const presenceCountRef = useRef(presenceCount);
   const hasInteractedRef = useRef(hasInteracted);
-  const messages = incomingMessages || [];
+  const messages = useMemo(() => incomingMessages || [], [incomingMessages]);
 
   // Keep refs updated
   useEffect(() => {
@@ -55,7 +64,7 @@ export function Room4Messages({
     if (feedRef.current) {
       feedRef.current.scrollTop = feedRef.current.scrollHeight;
     }
-  }, [incomingMessages]);
+  }, [messages]);
 
   // Handle input change
   const handleInputChange = (e) => {
@@ -67,8 +76,8 @@ export function Room4Messages({
     const text = input.trim();
     if (!text) return;
 
-    messageIdRef.current += 1;
-    const messageId = `${participantId}-${messageIdRef.current}`;
+    messageSeqRef.current += 1;
+    const messageId = makeMessageId(participantId, messageSeqRef.current);
 
     // Record the message (length only for analytics)
     onMessageSent(text.length);
@@ -78,6 +87,22 @@ export function Room4Messages({
 
     setInput("");
   }, [input, participantId, onMessageSent, sendWsMessage]);
+
+  const handleSendIcon = useCallback(
+    (iconId) => {
+      if (!iconId) return;
+
+      messageSeqRef.current += 1;
+      const messageId = makeMessageId(participantId, messageSeqRef.current);
+
+      // Count as a "message" for analytics (length 0)
+      onMessageSent(0);
+
+      sendWsMessage(messageId, { kind: "icon", text: "", iconId });
+      setIsIconOpen(false);
+    },
+    [participantId, onMessageSent, sendWsMessage]
+  );
 
   // Handle enter key (check for Korean IME composition)
   const handleKeyDown = (e) => {
@@ -93,6 +118,78 @@ export function Room4Messages({
   };
 
   const charsRemaining = MAX_MESSAGE_LENGTH - input.length;
+  const debouncedIconQuery = useDebouncedValue(iconQuery, 250);
+
+  // Search Iconify when panel opens / query changes
+  useEffect(() => {
+    if (!isIconOpen) return;
+    const q = debouncedIconQuery.trim();
+
+    // When query is short, show defaults
+    if (q.length < 2) {
+      setIconResults(DEFAULT_ICON_RESULTS);
+      setIconStatus("idle");
+      setIconError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    async function run() {
+      setIconStatus("loading");
+      setIconError("");
+
+      try {
+        const url = new URL("https://api.iconify.design/search");
+        url.searchParams.set("query", q);
+        url.searchParams.set("limit", String(ICONIFY_SEARCH_LIMIT));
+        url.searchParams.set("start", "0");
+
+        const res = await fetch(url.toString(), { signal: controller.signal });
+        if (!res.ok) {
+          throw new Error(`Iconify search failed (${res.status})`);
+        }
+        const data = await res.json();
+        const icons = Array.isArray(data?.icons) ? data.icons : [];
+
+        // Normalize into "prefix:name"
+        // Iconify search can return either:
+        // - strings: ["mdi:home", ...]
+        // - objects: [{ prefix: "mdi", name: "home", ... }, ...]
+        const names = Array.from(
+          new Set(
+            icons
+              .map((i) => {
+                if (typeof i === "string") return i;
+                const prefix = i?.prefix;
+                const name = i?.name;
+                if (typeof prefix === "string" && typeof name === "string") {
+                  return `${prefix}:${name}`;
+                }
+                return null;
+              })
+              .filter((id) => {
+                if (typeof id !== "string") return false;
+                const [p, n] = id.split(":");
+                return Boolean(p && n);
+              })
+          )
+        );
+
+        // Preload a few icons so thumbnails appear quickly
+        await Promise.allSettled(names.slice(0, 18).map((n) => loadIcon(n)));
+
+        setIconResults(names.length ? names : []);
+        setIconStatus("idle");
+      } catch (e) {
+        if (e?.name === "AbortError") return;
+        setIconStatus("error");
+        setIconError(e?.message || "Failed to search icons");
+      }
+    }
+
+    run();
+    return () => controller.abort();
+  }, [isIconOpen, debouncedIconQuery]);
 
   return (
     <div className="room3-content">
@@ -122,7 +219,12 @@ export function Room4Messages({
                 })}
               </span>
             </div>
-            <p className="message-text">{msg.text}</p>
+            {msg.kind === "icon" && msg.iconId && (
+              <div className="message-icon">
+                <Icon icon={msg.iconId} width={48} height={48} />
+              </div>
+            )}
+            {msg.text ? <p className="message-text">{msg.text}</p> : null}
           </div>
         ))}
       </div>
@@ -134,6 +236,48 @@ export function Room4Messages({
           <span>Content not stored</span>
         </div>
 
+        {isIconOpen && (
+          <div className="icon-panel">
+            <div className="icon-panel-header">
+              <div className="icon-panel-title">Search icons</div>
+              <input
+                className="icon-search"
+                value={iconQuery}
+                onChange={(e) => setIconQuery(e.target.value)}
+                placeholder="Type to search (e.g. bus, camera, heart)..."
+              />
+              <button
+                className="icon-close-btn"
+                onClick={() => setIsIconOpen(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <div className="icon-grid">
+              {(iconResults.length ? iconResults : DEFAULT_ICON_RESULTS).map(
+                (iconId) => (
+                  <button
+                    key={iconId}
+                    className="icon-thumb"
+                    onClick={() => handleSendIcon(iconId)}
+                    type="button"
+                    title={iconId}
+                  >
+                    <Icon icon={iconId} width={28} height={28} />
+                  </button>
+                )
+              )}
+            </div>
+            {iconStatus === "loading" ? (
+              <div className="icon-panel-hint">Loading…</div>
+            ) : null}
+            {iconStatus === "error" ? (
+              <div className="icon-panel-hint">Error: {iconError}</div>
+            ) : null}
+          </div>
+        )}
+
         <div className="messages-input-wrapper">
           <textarea
             className="messages-input"
@@ -144,6 +288,14 @@ export function Room4Messages({
             rows={2}
             maxLength={MAX_MESSAGE_LENGTH}
           />
+          <button
+            className="messages-icon-btn"
+            onClick={() => setIsIconOpen((v) => !v)}
+            type="button"
+            title="Send pixel icon"
+          >
+            ICON
+          </button>
           <button
             className="messages-send-btn"
             onClick={handleSend}
@@ -166,4 +318,38 @@ export function Room4Messages({
       </div>
     </div>
   );
+}
+
+const DEFAULT_ICON_RESULTS = [
+  "mdi:bus",
+  "mdi:cart",
+  "mdi:shopping",
+  "mdi:shopping-outline",
+  "mdi:car",
+  "mdi:office-building",
+  "mdi:camera",
+  "mdi:heart",
+  "mdi:message",
+  "mdi:star",
+  "mdi:music",
+  "mdi:gamepad-variant",
+];
+
+function useDebouncedValue(value, delayMs) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+function makeMessageId(participantId, seq) {
+  // Must remain unique even if the Messages room component remounts.
+  // Prefer UUID when available, otherwise fall back to time + seq.
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return `${participantId}-${uuid}`;
+  return `${participantId}-${Date.now()}-${seq}-${Math.random()
+    .toString(16)
+    .slice(2)}`;
 }

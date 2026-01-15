@@ -312,19 +312,22 @@ wss.on("connection", (ws) => {
         case "message": {
           // Room 3: Text messages - broadcast to all in room
           if (currentRoom === 3 && participantId) {
+            const kind = message.kind || "text";
             broadcastToRoom(
               3,
               {
                 type: "message",
                 participantId,
                 messageId: message.messageId,
-                text: message.text, // Now we send the actual text
+                kind,
+                text: message.text || "",
+                iconId: message.iconId || null,
                 timestamp: Date.now(),
               },
               ws // Exclude sender (they already have it locally)
             );
             console.log(
-              `[MSG] ${participantId}: ${message.text?.length} chars`
+              `[MSG] ${participantId}: ${kind}`
             );
           }
           break;

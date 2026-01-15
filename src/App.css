@@ -734,8 +734,113 @@
   font-weight: 500;
 }
 
+.messages-icon-btn {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.messages-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .messages-send-btn:disabled {
   opacity: 0.4;
+}
+
+.message-icon {
+  margin-top: var(--space-xs);
+}
+
+.icon-panel {
+  margin-bottom: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.icon-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+}
+
+.icon-panel-title {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.icon-search {
+  flex: 1;
+  margin: 0 var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.icon-search:focus {
+  outline: none;
+  border-color: var(--room3-color);
+}
+
+.icon-panel-hint {
+  margin-top: var(--space-sm);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.icon-close-btn {
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.icon-close-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-xs);
+}
+
+@media (max-width: 520px) {
+  .icon-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.icon-thumb {
+  padding: var(--space-xs);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+}
+
+.icon-thumb:hover {
+  border-color: var(--room3-color);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .messages-footer {
