@@ -84,7 +84,9 @@ export function Room6Face({ participantId, faceStates, sendFace }) {
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = stream;
-        await video.play();
+        // Don't await play(): on some mobile browsers it can hang without a user gesture.
+        // We'll start detection once frames are available.
+        video.play().catch(() => {});
         setHasPermission(true);
       } catch (e) {
         setHasPermission(false);
@@ -257,6 +259,7 @@ export function Room6Face({ participantId, faceStates, sendFace }) {
         {/* Hidden local video: used only for local landmark detection */}
         <video
           ref={videoRef}
+          autoPlay
           playsInline
           muted
           style={{ display: "none" }}
