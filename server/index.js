@@ -103,6 +103,7 @@ const rooms = {
   3: new Map(),
   4: new Map(),
   5: new Map(),
+  6: new Map(),
 };
 
 // Drawing history for Room 4 (keep last N strokes for new joiners)
@@ -117,6 +118,7 @@ function getRoomCounts() {
     3: rooms[3].size,
     4: rooms[4].size,
     5: rooms[5].size,
+    6: rooms[6].size,
   };
 }
 
@@ -390,6 +392,30 @@ wss.on("connection", (ws) => {
                 timestamp: Date.now(),
               },
               null // include sender is fine; clients can render everyone
+            );
+          }
+          break;
+        }
+
+        // ==================== Room 6: Face (local landmarks) ====================
+
+        case "face": {
+          if (currentRoom === 6 && participantId) {
+            const points = Array.isArray(message.points)
+              ? message.points
+              : null;
+            // Expect normalized points: [{x,y}, ...]
+            if (!points || points.length === 0) break;
+
+            broadcastToRoom(
+              6,
+              {
+                type: "face",
+                participantId,
+                points,
+                timestamp: Date.now(),
+              },
+              null
             );
           }
           break;

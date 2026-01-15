@@ -19,11 +19,13 @@ export function useWebSocket(participantId) {
     3: 0,
     4: 0,
     5: 0,
+    6: 0,
   });
   const [roomUsers, setRoomUsers] = useState([]);
   const [incomingMessages, setIncomingMessages] = useState([]);
   const [drawingStrokes, setDrawingStrokes] = useState([]);
   const [cursorStates, setCursorStates] = useState({});
+  const [faceStates, setFaceStates] = useState({});
 
   const wsRef = useRef(null);
   const currentRoomRef = useRef(null);
@@ -80,6 +82,12 @@ export function useWebSocket(participantId) {
           delete next[data.participantId];
           return next;
         });
+        setFaceStates((prev) => {
+          if (!prev[data.participantId]) return prev;
+          const next = { ...prev };
+          delete next[data.participantId];
+          return next;
+        });
         // Notify RTC handler about user leaving with a small delay
         // to avoid premature removal during WebRTC setup
         if (handlersRef.current.onUserLeft) {
@@ -99,6 +107,16 @@ export function useWebSocket(participantId) {
             y: data.y,
             active: data.active !== false,
             pointerType: data.pointerType || "unknown",
+            timestamp: data.timestamp || Date.now(),
+          },
+        }));
+        break;
+
+      case "face":
+        setFaceStates((prev) => ({
+          ...prev,
+          [data.participantId]: {
+            points: Array.isArray(data.points) ? data.points : [],
             timestamp: data.timestamp || Date.now(),
           },
         }));
@@ -267,6 +285,7 @@ export function useWebSocket(participantId) {
       setRoomUsers([]);
       // Cursor states are only used in Move room; reset on room switch
       setCursorStates({});
+      setFaceStates({});
     }
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -286,6 +305,7 @@ export function useWebSocket(participantId) {
     currentRoomRef.current = null;
     setRoomUsers([]);
     setCursorStates({});
+    setFaceStates({});
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "leave" }));
@@ -365,6 +385,18 @@ export function useWebSocket(participantId) {
     }
   }, []);
 
+  // Send face landmark points (Room 6)
+  const sendFace = useCallback((payload) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "face",
+          ...payload,
+        })
+      );
+    }
+  }, []);
+
   // Clear drawing (Room 4)
   const clearDrawing = useCallback(() => {
     setDrawingStrokes([]);
@@ -399,12 +431,14 @@ export function useWebSocket(participantId) {
     incomingMessages,
     drawingStrokes,
     cursorStates,
+    faceStates,
     joinRoom,
     leaveRoom,
     sendMessage,
     sendRtcSignal,
     sendStroke,
     sendCursor,
+    sendFace,
     clearDrawing,
     clearMessages,
     registerHandlers,

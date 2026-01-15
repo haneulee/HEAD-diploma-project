@@ -44,11 +44,13 @@ function App() {
     incomingMessages,
     drawingStrokes,
     cursorStates,
+    faceStates,
     joinRoom: wsJoinRoom,
     leaveRoom: wsLeaveRoom,
     sendMessage: wsSendMessage,
     sendStroke: wsSendStroke,
     sendCursor: wsSendCursor,
+    sendFace: wsSendFace,
     clearDrawing: wsClearDrawing,
     clearMessages: wsClearMessages,
     getPresenceCount,
@@ -143,6 +145,8 @@ function App() {
               incomingMessages={incomingMessages}
               cursorStates={cursorStates}
               sendCursor={wsSendCursor}
+              faceStates={faceStates}
+              sendFace={wsSendFace}
               drawingStrokes={drawingStrokes}
               sendStroke={wsSendStroke}
               clearDrawing={wsClearDrawing}

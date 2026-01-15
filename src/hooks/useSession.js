@@ -64,6 +64,11 @@ function createInitialSession() {
         visits: 0,
         // Room 5: Move (ambient co-presence)
       },
+      room6: {
+        totalTimeMs: 0,
+        visits: 0,
+        // Room 6: Face (local landmarks)
+      },
     },
 
     // Global metrics
@@ -92,6 +97,7 @@ function normalizeSession(parsed) {
       room3: { ...defaults.metrics.room3, ...(metrics.room3 || {}) },
       room4: { ...defaults.metrics.room4, ...(metrics.room4 || {}) },
       room5: { ...defaults.metrics.room5, ...(metrics.room5 || {}) },
+      room6: { ...defaults.metrics.room6, ...(metrics.room6 || {}) },
     },
   };
 }
@@ -460,6 +466,7 @@ export function useSession() {
       timeMessagesOnlyMs: m.room3.totalTimeMs,
       timeDrawingMs: m.room4.totalTimeMs,
       timeMoveMs: m.room5?.totalTimeMs || 0,
+      timeFaceMs: m.room6?.totalTimeMs || 0,
 
       // Room 2 metrics
       speakingEvents: m.room2.speakingEvents,
@@ -527,6 +534,7 @@ export function useSession() {
       "timeMessagesOnlyMs",
       "timeDrawingMs",
       "timeMoveMs",
+      "timeFaceMs",
       "speakingEvents",
       "speakingMs",
       "messagesSent",
@@ -548,6 +556,7 @@ export function useSession() {
       stats.timeMessagesOnlyMs,
       stats.timeDrawingMs,
       stats.timeMoveMs,
+      stats.timeFaceMs,
       stats.speakingEvents,
       stats.speakingMs,
       stats.messagesSent,
@@ -623,6 +632,7 @@ export async function postSessionData(session, feedback = "", isFinal = false) {
     timeMessagesOnlyMs: m.room3.totalTimeMs,
     timeDrawingMs: m.room4.totalTimeMs,
     timeMoveMs: m.room5?.totalTimeMs || 0,
+    timeFaceMs: m.room6?.totalTimeMs || 0,
 
     // Room 2
     speakingEvents: m.room2.speakingEvents,

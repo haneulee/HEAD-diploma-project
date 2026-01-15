@@ -88,14 +88,45 @@ function doPost(e) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const data = JSON.parse(e.postData.contents);
 
-    // Add headers if first row is empty
-    if (sheet.getLastRow() === 0) {
-      const headers = Object.keys(data);
+    // Get existing headers (row 1). If missing, initialize.
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+
+    let headers = [];
+    if (lastRow === 0 || lastCol === 0) {
+      headers = Object.keys(data);
       sheet.appendRow(headers);
+    } else {
+      headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
     }
 
-    // Add data row
-    const values = Object.values(data);
+    // Add new headers if the payload has new fields.
+    const incomingKeys = Object.keys(data);
+    const newKeys = incomingKeys.filter((k) => headers.indexOf(k) === -1);
+    if (newKeys.length > 0) {
+      const startCol = headers.length + 1;
+      sheet.getRange(1, startCol, 1, newKeys.length).setValues([newKeys]);
+
+      // Fill existing rows with 0 for new columns (preserves existing data).
+      const existingDataRows = sheet.getLastRow() - 1;
+      if (existingDataRows > 0) {
+        const zeros = Array(existingDataRows)
+          .fill(null)
+          .map(() => Array(newKeys.length).fill(0));
+        sheet
+          .getRange(2, startCol, existingDataRows, newKeys.length)
+          .setValues(zeros);
+      }
+
+      headers = headers.concat(newKeys);
+    }
+
+    // Build row aligned to headers. Missing values become 0 (or "" for strings).
+    const values = headers.map((h) => {
+      if (Object.prototype.hasOwnProperty.call(data, h)) return data[h];
+      // Default for missing numeric fields
+      return 0;
+    });
     sheet.appendRow(values);
 
     return ContentService.createTextOutput(

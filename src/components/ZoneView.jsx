@@ -9,6 +9,7 @@ import { Room2AudioOnly } from "./Room2AudioOnly";
 import { Room4Messages } from "./Room4Messages";
 import { Room5Move } from "./Room5Move";
 import { Room6Drawing } from "./Room6Drawing";
+import { Room6Face } from "./Room6Face";
 
 export function RoomView({
   roomId,
@@ -27,6 +28,8 @@ export function RoomView({
   incomingMessages,
   cursorStates,
   sendCursor,
+  faceStates,
+  sendFace,
   drawingStrokes,
   sendStroke,
   clearDrawing,
@@ -112,6 +115,14 @@ export function RoomView({
             participantId={participantId}
             cursorStates={cursorStates}
             sendCursor={sendCursor}
+          />
+        )}
+
+        {roomId === 6 && (
+          <Room6Face
+            participantId={participantId}
+            faceStates={faceStates}
+            sendFace={sendFace}
           />
         )}
       </div>
