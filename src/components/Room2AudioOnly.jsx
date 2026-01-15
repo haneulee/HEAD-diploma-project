@@ -9,9 +9,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { API_URL } from "../config/api";
 import { LIVEKIT_URL } from "../config/livekit";
+import soundtouchWorkletUrl from "@soundtouchjs/audio-worklet?url";
 
 const VOLUME_THRESHOLD = 0.02;
 const SPEECH_DEBOUNCE_MS = 200;
+const DEFAULT_PITCH_SEMITONES = 12; // +12 = 1 octave up (chipmunk)
 
 export function Room2AudioOnly({
   participantId,
@@ -31,6 +33,9 @@ export function Room2AudioOnly({
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
   const localAudioTrackRef = useRef(null);
+  const processedAudioTrackRef = useRef(null);
+  const soundtouchNodeRef = useRef(null);
+  const workletLoadedRef = useRef(false);
 
   const idleTrackingRef = useRef(null);
   const speakingStartRef = useRef(null);
@@ -159,14 +164,49 @@ export function Room2AudioOnly({
       localAudioTrackRef.current = audioTrack;
       setHasPermission(true);
 
-      // Set up audio analysis for speaking detection
-      const stream = new MediaStream([audioTrack.mediaStreamTrack]);
+      // Audio context (analysis + optional voice change)
       audioContextRef.current = new AudioContext();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
+      const micStream = new MediaStream([audioTrack.mediaStreamTrack]);
+      const source = audioContextRef.current.createMediaStreamSource(micStream);
+
+      // Set up audio analysis for speaking detection
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
       startAnalyzing();
+
+      // Optional: voice changer (pitch shift) using AudioWorklet
+      let trackToPublish = audioTrack.mediaStreamTrack;
+      try {
+        if (!workletLoadedRef.current) {
+          await audioContextRef.current.audioWorklet.addModule(
+            soundtouchWorkletUrl
+          );
+          workletLoadedRef.current = true;
+        }
+
+        const stNode = new AudioWorkletNode(
+          audioContextRef.current,
+          "soundtouch-processor"
+        );
+        soundtouchNodeRef.current = stNode;
+        // Always-on voice change: force pitch shift
+        stNode.parameters.get("pitchSemitones").value = DEFAULT_PITCH_SEMITONES;
+
+        // Connect mic -> pitch shifter -> destination (no local playback to avoid echo)
+        const dest = audioContextRef.current.createMediaStreamDestination();
+        source.connect(stNode);
+        stNode.connect(dest);
+
+        const processedTrack = dest.stream.getAudioTracks()[0];
+        if (processedTrack) {
+          processedAudioTrackRef.current = processedTrack;
+          trackToPublish = processedTrack;
+        }
+      } catch (e) {
+        console.warn("[Voice] Failed to initialize pitch shift:", e);
+        // Fall back to raw mic track
+      }
 
       // Get token from server
       const tokenResponse = await fetch(
@@ -252,7 +292,7 @@ export function Room2AudioOnly({
 
       // Publish local audio track (no video)
       // DTX helps reduce echo and bandwidth when not speaking
-      await room.localParticipant.publishTrack(audioTrack, {
+      await room.localParticipant.publishTrack(trackToPublish, {
         name: "microphone",
         dtx: true, // Discontinuous transmission - reduces echo feedback
         red: true, // Redundant encoding for better quality
@@ -308,6 +348,13 @@ export function Room2AudioOnly({
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
+    }
+
+    soundtouchNodeRef.current = null;
+
+    if (processedAudioTrackRef.current) {
+      processedAudioTrackRef.current.stop();
+      processedAudioTrackRef.current = null;
     }
 
     if (localAudioTrackRef.current) {
