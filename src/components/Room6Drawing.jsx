@@ -50,6 +50,11 @@ export function Room6Drawing({
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
   const currentStrokeRef = useRef([]);
+  const currentStrokeStyleRef = useRef({
+    tool: "pen",
+    color: COLORS[0],
+    width: LINE_WIDTH,
+  });
   const strokeIdRef = useRef(0);
   const idleTrackingRef = useRef(null);
   const presenceCountRef = useRef(presenceCount);
@@ -93,6 +98,17 @@ export function Room6Drawing({
     drawingStrokes.forEach((stroke) => {
       drawStrokeOnCanvas(ctx, stroke);
     });
+
+    // Also draw the in-progress stroke so it doesn't "disappear"
+    if (currentStrokeRef.current.length > 1) {
+      const s = currentStrokeStyleRef.current;
+      drawStrokeOnCanvas(ctx, {
+        points: currentStrokeRef.current,
+        color: s.color,
+        width: s.width,
+        tool: s.tool,
+      });
+    }
   }, [drawingStrokes]);
 
   // Initialize canvas
@@ -157,6 +173,11 @@ export function Room6Drawing({
 
       setIsDrawing(true);
       currentStrokeRef.current = [pos];
+      currentStrokeStyleRef.current = {
+        tool,
+        color,
+        width: LINE_WIDTH,
+      };
 
       // Draw first point
       const ctx = contextRef.current;
@@ -177,15 +198,24 @@ export function Room6Drawing({
       e.preventDefault();
 
       const pos = getPosition(e);
-      currentStrokeRef.current.push(pos);
+      const pts = currentStrokeRef.current;
+      const last = pts[pts.length - 1];
+      pts.push(pos);
 
       // Draw to canvas
       const ctx = contextRef.current;
       if (ctx) {
+        // Re-apply style each move because redrawCanvas() can change it
+        const s = currentStrokeStyleRef.current;
+        ctx.strokeStyle = s.tool === "eraser" ? "#ffffff" : s.color;
+        ctx.lineWidth =
+          s.tool === "eraser" ? ERASER_WIDTH : s.width || LINE_WIDTH;
+
+        // Draw a single segment (safe even if canvas was redrawn mid-stroke)
+        ctx.beginPath();
+        ctx.moveTo(last.x, last.y);
         ctx.lineTo(pos.x, pos.y);
         ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y);
       }
     },
     [isDrawing]
@@ -204,12 +234,13 @@ export function Room6Drawing({
         strokeIdRef.current += 1;
         const strokeId = `${participantId}-${strokeIdRef.current}`;
 
+        const s = currentStrokeStyleRef.current;
         const stroke = {
           strokeId,
           points: currentStrokeRef.current,
-          color,
-          width: LINE_WIDTH,
-          tool,
+          color: s.color,
+          width: s.width || LINE_WIDTH,
+          tool: s.tool,
         };
 
         // Record stroke (marks as interaction)
@@ -221,7 +252,7 @@ export function Room6Drawing({
 
       currentStrokeRef.current = [];
     },
-    [isDrawing, participantId, color, tool, onStroke, sendStroke]
+    [isDrawing, participantId, onStroke, sendStroke]
   );
 
   // Handle clear
