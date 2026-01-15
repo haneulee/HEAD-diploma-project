@@ -770,17 +770,21 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-sm);
+  gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 .icon-panel-title {
   font-size: 0.8rem;
   color: var(--text-secondary);
   letter-spacing: 0.02em;
+  flex: 0 0 auto;
 }
 
 .icon-search {
-  flex: 1;
-  margin: 0 var(--space-sm);
+  flex: 1 1 180px;
+  margin: 0;
+  min-width: 0;
   padding: var(--space-xs) var(--space-sm);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -801,6 +805,7 @@
 }
 
 .icon-close-btn {
+  flex: 0 0 auto;
   padding: var(--space-xs) var(--space-sm);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -812,6 +817,17 @@
 .icon-close-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+@media (max-width: 520px) {
+  .icon-panel-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .icon-close-btn {
+    width: 100%;
+  }
 }
 
 .icon-grid {
