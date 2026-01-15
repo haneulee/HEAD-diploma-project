@@ -37,6 +37,7 @@ export function Room5Move({ participantId, cursorStates, sendCursor }) {
   }, [sendCursor]);
 
   const [local, setLocal] = useState(null); // {x,y,active,pointerType,ts}
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
 
   const sendThrottled = useCallback((payload) => {
     const now = Date.now();
@@ -76,6 +77,56 @@ export function Room5Move({ participantId, cursorStates, sendCursor }) {
       })
       .filter(Boolean);
   }, [cursorStates]);
+
+  // Track stage size for orb sizing
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries?.[0]?.contentRect;
+      if (!r) return;
+      setStageSize({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const orbSizePx = useMemo(() => {
+    const base = 96; // smaller default orb (avoid dominating on mobile)
+    const grow = 20; // growth factor per sqrt(count)
+    const w = stageSize.w || 0;
+    const h = stageSize.h || 0;
+    const max = Math.min(w || 420, h || 420) * 0.92; // never exceed stage width/height
+
+    const points = [
+      ...remoteMarkers.map((m) => ({ x: m.x, y: m.y })),
+      ...(local?.x != null && local?.y != null
+        ? [{ x: local.x, y: local.y }]
+        : []),
+    ];
+
+    const countInside = (diameterPx) => {
+      const w = stageSize.w || 0;
+      const h = stageSize.h || 0;
+      if (!w || !h) return 0;
+      const r = diameterPx / 2;
+      let c = 0;
+      for (const p of points) {
+        const dx = (p.x - 0.5) * w;
+        const dy = (p.y - 0.5) * h;
+        if (Math.hypot(dx, dy) <= r) c += 1;
+      }
+      return c;
+    };
+
+    // Small fixed-point iteration so growth uses "inside" count
+    let d = base;
+    for (let i = 0; i < 2; i++) {
+      const inside = countInside(d);
+      d = Math.min(base + grow * Math.sqrt(Math.max(0, inside)), max);
+    }
+    return d;
+  }, [remoteMarkers, local, stageSize.w, stageSize.h]);
 
   const toNormalized = useCallback((clientX, clientY) => {
     const el = stageRef.current;
@@ -144,6 +195,13 @@ export function Room5Move({ participantId, cursorStates, sendCursor }) {
   return (
     <div className="move-room">
       <div className="move-stage" ref={stageRef}>
+        {/* Center orb: outlined circle that grows with co-presence count */}
+        <div
+          className="move-orb"
+          style={{ width: orbSizePx, height: orbSizePx }}
+          aria-hidden="true"
+        />
+
         <div
           className="move-hit"
           onPointerMove={handlePointerMove}
@@ -153,6 +211,7 @@ export function Room5Move({ participantId, cursorStates, sendCursor }) {
           onPointerLeave={handlePointerUpOrLeave}
         />
 
+        {/* Markers are always visible across the whole stage */}
         {remoteMarkers.map((s) => (
           <div
             key={s.id}
