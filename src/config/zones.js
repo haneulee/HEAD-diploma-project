@@ -57,18 +57,6 @@ export const ROOMS = {
     color: "room5",
     icon: "👋",
   },
-  6: {
-    id: 6,
-    name: "Face",
-    shortDesc: "Share face presence without video.",
-    description:
-      "Detect face landmarks locally and share only minimal line traces.",
-    rules:
-      "Your camera is used locally for landmark detection. No video is shared. No names.",
-    permission: "camera",
-    color: "room6",
-    icon: "🙂",
-  },
 };
 
 // Get room by ID

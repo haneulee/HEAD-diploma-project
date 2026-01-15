@@ -124,9 +124,6 @@
 .room-card[data-room="5"]::before {
   background: var(--accent);
 }
-.room-card[data-room="6"]::before {
-  background: var(--room1-color);
-}
 
 .room-card:hover {
   border-color: var(--border-light);
@@ -198,9 +195,6 @@
 }
 .room-card[data-room="5"] h3 {
   color: var(--text-primary);
-}
-.room-card[data-room="6"] h3 {
-  color: var(--room1-color);
 }
 
 .room-card-desc {

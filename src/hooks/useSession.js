@@ -89,6 +89,10 @@ function normalizeSession(parsed) {
   return {
     ...defaults,
     ...parsed,
+    // If a previously-saved session was in a now-hidden room,
+    // drop back to lobby instead of rendering an invalid room view.
+    currentRoom:
+      parsed?.currentRoom === 6 ? null : parsed?.currentRoom ?? defaults.currentRoom,
     metrics: {
       ...defaults.metrics,
       ...metrics,
