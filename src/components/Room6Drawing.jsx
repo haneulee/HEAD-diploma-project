@@ -18,17 +18,20 @@ const LINE_WIDTH = 3;
 const ERASER_WIDTH = 20;
 
 // Draw a single stroke on canvas (pure function, no hooks)
-function drawStrokeOnCanvas(ctx, stroke) {
+function drawStrokeOnCanvas(ctx, stroke, scaleX = 1, scaleY = 1) {
   if (!stroke.points || stroke.points.length < 2) return;
 
   ctx.beginPath();
   ctx.strokeStyle = stroke.tool === "eraser" ? "#ffffff" : stroke.color;
-  ctx.lineWidth =
+  const baseWidth =
     stroke.tool === "eraser" ? ERASER_WIDTH : stroke.width || LINE_WIDTH;
+  // Scale width so strokes look similar across devices
+  const wScale = Math.min(scaleX, scaleY);
+  ctx.lineWidth = baseWidth * wScale;
 
-  ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+  ctx.moveTo(stroke.points[0].x * scaleX, stroke.points[0].y * scaleY);
   for (let i = 1; i < stroke.points.length; i++) {
-    ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+    ctx.lineTo(stroke.points[i].x * scaleX, stroke.points[i].y * scaleY);
   }
   ctx.stroke();
 }
@@ -49,6 +52,7 @@ export function Room6Drawing({
 
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
+  const canvasSizeRef = useRef({ w: 0, h: 0 }); // CSS pixels
   const currentStrokeRef = useRef([]);
   const currentStrokeStyleRef = useRef({
     tool: "pen",
@@ -90,13 +94,20 @@ export function Room6Drawing({
     const canvas = canvasRef.current;
     if (!ctx || !canvas) return;
 
+    const { w: canvasW, h: canvasH } = canvasSizeRef.current;
+    if (!canvasW || !canvasH) return;
+
     // Clear canvas
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, canvasW, canvasH);
 
     // Draw all strokes
     drawingStrokes.forEach((stroke) => {
-      drawStrokeOnCanvas(ctx, stroke);
+      const srcW = stroke.canvasW || canvasW;
+      const srcH = stroke.canvasH || canvasH;
+      const scaleX = srcW ? canvasW / srcW : 1;
+      const scaleY = srcH ? canvasH / srcH : 1;
+      drawStrokeOnCanvas(ctx, stroke, scaleX, scaleY);
     });
 
     // Also draw the in-progress stroke so it doesn't "disappear"
@@ -122,13 +133,15 @@ export function Room6Drawing({
       const rect = container.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
 
+      canvasSizeRef.current = { w: rect.width, h: rect.height };
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
 
       const ctx = canvas.getContext("2d");
-      ctx.scale(dpr, dpr);
+      // Avoid cumulative scaling on resize
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       contextRef.current = ctx;
@@ -235,9 +248,12 @@ export function Room6Drawing({
         const strokeId = `${participantId}-${strokeIdRef.current}`;
 
         const s = currentStrokeStyleRef.current;
+        const { w: canvasW, h: canvasH } = canvasSizeRef.current;
         const stroke = {
           strokeId,
           points: currentStrokeRef.current,
+          canvasW,
+          canvasH,
           color: s.color,
           width: s.width || LINE_WIDTH,
           tool: s.tool,

@@ -342,6 +342,8 @@ wss.on("connection", (ws) => {
               id: message.strokeId,
               participantId,
               points: message.points,
+              canvasW: message.canvasW || null,
+              canvasH: message.canvasH || null,
               color: message.color || "#ffffff",
               width: message.width || 2,
               tool: message.tool || "pen",
